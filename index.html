@@ -262,9 +262,12 @@
                 body: formData
             });
             const result = await response.json();
+            console.log('ImgBB response:', result);
             if (result.success) return result.data.url;
+            alert('Ошибка загрузки фото: ' + (result.error.message || 'Неизвестная ошибка'));
             return null;
         } catch (e) {
+            alert('Ошибка сети при загрузке фото: ' + e.message);
             return null;
         }
     }
@@ -293,7 +296,6 @@
             for (let file of files) {
                 const imgUrl = await uploadToImgBB(file);
                 if (!imgUrl) {
-                    alert('Ошибка загрузки фото. Проверьте API ключ.');
                     allValid = false;
                     break;
                 }
