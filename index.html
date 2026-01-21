@@ -47,6 +47,7 @@
     .btn-delete-item:hover svg { opacity: 1; fill: #ff4d4d; }
     
     .box-card { background: var(--card-bg); border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #21262d; cursor: pointer; }
+    .box-desc { font-size:11px; color:var(--text-dim); margin-top:6px; line-height: 1.4; }
 
     input[type="text"], input[type="number"] {
         width: 100%; box-sizing: border-box; padding: 14px; border-radius: 10px;
@@ -55,7 +56,6 @@
     }
     input:focus { border-color: var(--accent-blue); }
 
-    /* Стили для загрузки фото (как на видео) */
     .photo-upload-container {
         display: flex;
         align-items: center;
@@ -64,7 +64,7 @@
     }
     .photo-label {
         width: 60px; height: 60px;
-        border-radius: 50%; /* Круглая форма */
+        border-radius: 50%;
         background: rgba(255, 255, 255, 0.05);
         border: 1px dashed var(--accent-blue);
         display: flex; align-items: center; justify-content: center;
@@ -75,10 +75,8 @@
     }
     .photo-label svg { fill: var(--accent-blue); width: 24px; height: 24px; }
     
-    /* Скрытый инпут */
     .file-input-hidden { display: none; }
 
-    /* Превью фото */
     .photo-preview {
         width: 100%; height: 100%;
         background-size: cover;
@@ -129,39 +127,40 @@
         <div class="box-card" onclick="sendCalc(23,17,13,0.6,'MINI',679)">
             <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка MINI <span style="color:var(--accent-blue)">679 ₽</span></div>
             <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">23x17x13 см, до 0,6 кг</div>
+            <div class="box-desc">Вещи (футболка, сумка, ремень, носки)</div>
         </div>
         <div class="box-card" onclick="sendCalc(36,26,14,1.5,'SMALL',1562)">
             <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка SMALL <span style="color:var(--accent-blue)">1562 ₽</span></div>
             <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">36x26x14 см, до 1,5 кг</div>
+            <div class="box-desc">Пара обуви в коробке</div>
         </div>
         <div class="box-card" onclick="sendCalc(40,29,16,2.5,'LARGE',2411)">
             <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка LARGE <span style="color:var(--accent-blue)">2411 ₽</span></div>
             <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">40x29x16 см, до 2,5 кг</div>
+            <div class="box-desc">Пара обуви в коробке+несколько вещей</div>
         </div>
         <div class="box-card" onclick="sendCalc(37,29,28,3.5,'X-LARGE',3489)">
             <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка X-LARGE <span style="color:var(--accent-blue)">3489 ₽</span></div>
             <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">37x29x28 см, до 3,5 кг</div>
+            <div class="box-desc">Две пары обуви в коробке+несколько вещей</div>
         </div>
     </div>
 
     <div id="buyout" class="content">
-        <div id="items-container">
-            </div>
-
+        <div id="items-container"></div>
         <button class="btn-add" onclick="addItem()">+ ДОБАВИТЬ ЕЩЕ</button>
         <div id="total-block" class="box-card" style="text-align:center; display:none; border-color:var(--accent-blue)">
             <div style="font-size:12px; color:var(--text-dim)">ИТОГО К ВЫКУПУ:</div>
             <div id="total-res" style="font-size:22px; font-weight:800; color:var(--accent-blue); margin-top:5px;"></div>
         </div>
-        <button id="send-btn" class="footer-btn" onclick="sendOrder()">ОФОРМИТЬ ВЫКУП</button>
+        <button id="send-btn" class="footer-btn" onclick="sendOrder()">ОФОРМИТЬ ЗАКАЗ</button>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // !!! ВСТАВЬТЕ СЮДА ВАШ API КЛЮЧ ОТ IMGBB (https://api.imgbb.com/) !!!
-    const IMGBB_KEY = 'ВАШ_КЛЮЧ_IMGBB'; 
+    const IMGBB_KEY = '412d2791dd8620104d0849b745f489e0'; 
 
     function switchTab(id) {
         document.querySelectorAll('.tab, .content').forEach(el => el.classList.remove('active'));
@@ -169,7 +168,6 @@
         event.currentTarget.classList.add('active');
     }
 
-    // Инициализация первого товара
     document.addEventListener("DOMContentLoaded", () => {
         addItem();
     });
@@ -179,8 +177,6 @@
         const nextNum = container.getElementsByClassName('order-item').length + 1;
         const div = document.createElement('div');
         div.className = 'order-item';
-        
-        // Уникальный ID для input-file
         const fileId = `file-${Date.now()}-${nextNum}`;
 
         div.innerHTML = `
@@ -188,22 +184,19 @@
                 <svg width="24" height="24" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
             </button>
             <div class="section-title" style="margin:0 0 10px 0">ТОВАР №${nextNum}</div>
-            
             <input type="text" class="item-link" placeholder="Ссылка на товар">
             <input type="number" class="item-price" placeholder="Цена в юанях (¥)" oninput="recalc()">
-            
             <div class="photo-upload-container">
                 <input type="file" id="${fileId}" class="file-input-hidden" accept="image/*" onchange="handleFileSelect(this)">
                 <label for="${fileId}" class="photo-label">
                     <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/><path d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="3.2"/></svg>
-                    <svg viewBox="0 0 24 24" style="position: absolute;"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+                    <svg viewBox="0 0 24 24" style="position: absolute; width:16px; height:16px; bottom:12px; right:12px; fill:var(--accent-blue)"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
                     <div class="photo-preview"></div>
                 </label>
                 <span class="photo-hint">Нажмите на иконку,<br>чтобы добавить фото</span>
             </div>
         `;
         container.appendChild(div);
-        // Перенумерация заголовков, если нужно
         refreshTitles();
     }
 
@@ -211,7 +204,6 @@
         const label = input.nextElementSibling;
         const preview = label.querySelector('.photo-preview');
         const file = input.files[0];
-
         if (file) {
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -227,7 +219,6 @@
 
     function removeThisItem(btn) {
         if(document.getElementsByClassName('order-item').length <= 1) {
-             // Можно очистить поля вместо удаления, если это последний элемент
              const item = btn.parentElement;
              item.querySelector('.item-link').value = '';
              item.querySelector('.item-price').value = '';
@@ -258,7 +249,6 @@
         } else block.style.display = 'none';
     }
 
-    // Загрузка фото на ImgBB
     async function uploadToImgBB(file) {
         const formData = new FormData();
         formData.append('image', file);
@@ -271,7 +261,6 @@
             if (result.success) return result.data.url;
             return null;
         } catch (e) {
-            console.error(e);
             return null;
         }
     }
@@ -279,12 +268,10 @@
     async function sendOrder() {
         const itemsEls = document.querySelectorAll('.order-item');
         if (!itemsEls.length) return alert('Добавьте товар');
-        
         const btn = document.getElementById('send-btn');
         const originalText = btn.innerText;
         btn.disabled = true;
         btn.innerText = "ЗАГРУЗКА ФОТО...";
-
         const items = [];
         let allValid = true;
 
@@ -292,22 +279,18 @@
             const link = el.querySelector('.item-link').value;
             const p = Math.ceil(parseFloat(el.querySelector('.item-price').value) || 0);
             const file = el.querySelector('.file-input-hidden').files[0];
-
-            if (!link && p <= 0) continue; // Пропуск пустых
+            if (!link && p <= 0) continue; 
             if (!file) {
                 alert('Пожалуйста, прикрепите фото ко всем товарам');
                 allValid = false;
                 break;
             }
-
-            // Загружаем фото
             const imgUrl = await uploadToImgBB(file);
             if (!imgUrl) {
-                alert('Ошибка загрузки фото. Проверьте интернет или API ключ.');
+                alert('Ошибка загрузки фото. Проверьте API ключ.');
                 allValid = false;
                 break;
             }
-
             items.push({
                 link: link,
                 price: p,
@@ -318,10 +301,7 @@
 
         if (allValid && items.length > 0) {
             tg.sendData(JSON.stringify({ type: 'order', items }));
-        } else if (items.length === 0 && allValid) {
-            alert('Заполните данные о товаре');
         }
-
         btn.disabled = false;
         btn.innerText = originalText;
     }
