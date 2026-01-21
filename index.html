@@ -7,63 +7,96 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); padding: 15px; margin: 0; }
         .section-title { font-size: 13px; font-weight: 600; margin: 10px 5px; text-transform: uppercase; opacity: 0.5; letter-spacing: 0.5px; }
+        
+        /* Стили карточек */
         .box-card { 
             background: var(--tg-theme-secondary-bg-color); 
             border-radius: 15px; padding: 16px; margin-bottom: 12px; 
             cursor: pointer; border: 2px solid transparent; transition: all 0.2s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         .box-card:active { transform: scale(0.98); border-color: var(--tg-theme-button-color); }
-        .box-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+        .box-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
         .box-info { font-size: 14px; font-weight: 500; opacity: 0.9; color: var(--tg-theme-button-color); }
-        .box-desc { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 6px; line-height: 1.4; }
+        .box-desc { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 6px; }
+        .box-price { font-size: 12px; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+
+        /* Стили опций */
+        .options-box {
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 15px; padding: 16px; margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .option-label { font-weight: 600; font-size: 15px; }
+        
+        /* Переключатель (Toggle) */
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--tg-theme-button-color); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
         .btn-custom { 
             width: 100%; padding: 16px; background: #6c757d; color: white; 
-            border: none; border-radius: 15px; font-weight: 700; font-size: 15px; margin-top: 10px; cursor: pointer;
+            border: none; border-radius: 15px; font-weight: 700; font-size: 15px; margin-top: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="section-title">Готовые решения (Гуанчжоу)</div>
+    <div class="section-title">Дополнительные услуги</div>
+    <div class="options-box">
+        <div class="option-label">Деревянная обрешетка (+300 ₽)</div>
+        <label class="switch">
+            <input type="checkbox" id="crate-toggle">
+            <span class="slider"></span>
+        </label>
+    </div>
 
-    <div class="box-card" onclick="selectBox(23, 17, 13, 0.6, 'MINI')">
-        <div class="box-title">Коробка MINI <span>📦</span></div>
+    <div class="section-title">Упаковки</div>
+
+    <div class="box-card" onclick="selectBox(23, 17, 13, 0.6, 'MINI', 679)">
+        <div class="box-title">MINI <span class="box-price">679 ₽</span></div>
         <div class="box-info">23x17x13 см • до 0.6 кг</div>
-        <div class="box-desc">Идеально для: футболки, сумки, ремня или носков.</div>
+        <div class="box-desc">Аксессуары, футболки, мелкие вещи.</div>
     </div>
 
-    <div class="box-card" onclick="selectBox(36, 26, 14, 1.5, 'SMALL')">
-        <div class="box-title">Коробка SMALL <span>📦</span></div>
+    <div class="box-card" onclick="selectBox(36, 26, 14, 1.5, 'SMALL', 1562)">
+        <div class="box-title">SMALL <span class="box-price">1562 ₽</span></div>
         <div class="box-info">36x26x14 см • до 1.5 кг</div>
-        <div class="box-desc">Оптимально для одной пары обуви в коробке.</div>
+        <div class="box-desc">Одна пара обуви в коробке.</div>
     </div>
 
-    <div class="box-card" onclick="selectBox(40, 29, 16, 2.5, 'LARGE')">
-        <div class="box-title">Коробка LARGE <span>📦</span></div>
+    <div class="box-card" onclick="selectBox(40, 29, 16, 2.5, 'LARGE', 2411)">
+        <div class="box-title">LARGE <span class="box-price">2411 ₽</span></div>
         <div class="box-info">40x29x16 см • до 2.5 кг</div>
-        <div class="box-desc">Подойдет для пары обуви и нескольких вещей.</div>
+        <div class="box-desc">Пара обуви + одежда.</div>
     </div>
 
-    <div class="box-card" onclick="selectBox(37, 29, 28, 3.5, 'X-LARGE')">
-        <div class="box-title">Коробка X-LARGE <span>📦</span></div>
+    <div class="box-card" onclick="selectBox(37, 29, 28, 3.5, 'X-LARGE', 3489)">
+        <div class="box-title">X-LARGE <span class="box-price">3489 ₽</span></div>
         <div class="box-info">37x29x28 см • до 3.5 кг</div>
-        <div class="box-desc">Для двух пар обуви и дополнительной одежды.</div>
+        <div class="box-desc">Две пары обуви + вещи.</div>
     </div>
 
     <div class="section-title">Индивидуальный расчет</div>
-    <button class="btn-custom" onclick="contactSupport()">Свой вариант / Связаться с нами</button>
+    <button class="btn-custom" onclick="contactSupport()">Свой вариант / Связаться</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        function selectBox(l, w, h, weight, name) {
+        function selectBox(l, w, h, weight, name, basePrice) {
+            const hasCrate = document.getElementById('crate-toggle').checked;
+            const finalPackPrice = hasCrate ? basePrice + 300 : basePrice;
+            
             tg.sendData(JSON.stringify({
                 l: l, w: w, h: h,
                 weight: weight,
                 price: 100, 
                 catId: 19,
-                boxName: name
+                boxName: name,
+                packPrice: finalPackPrice,
+                hasCrate: hasCrate
             }));
         }
 
