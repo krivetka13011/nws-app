@@ -293,34 +293,4 @@
                 break;
             }
             const imgUrls = [];
-            for (let file of files) {
-                const imgUrl = await uploadToImgBB(file);
-                if (!imgUrl) {
-                    allValid = false;
-                    break;
-                }
-                imgUrls.push(imgUrl);
-            }
-            if (!allValid) break;
-            items.push({
-                link: link,
-                price: p,
-                resYuan: ((p + 30) * 1.05).toFixed(2),
-                imgUrls: imgUrls 
-            });
-        }
-
-        if (allValid && items.length > 0) {
-            tg.sendData(JSON.stringify({ type: 'order', items }));
-        }
-        btn.disabled = false;
-        btn.innerText = originalText;
-    }
-
-    function sendCalc(l, w, h, weight, name, price) {
-        const crate = document.getElementById('crate-toggle').checked;
-        tg.sendData(JSON.stringify({ type: 'calc', l, w, h, weight, boxName: name, packPrice: crate ? price + 300 : price, hasCrate: crate }));
-    }
-</script>
-</body>
-</html>
+            for (
