@@ -2,75 +2,72 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); padding: 15px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); padding: 15px; margin: 0; }
+        .section-title { font-size: 13px; font-weight: 600; margin: 10px 5px; text-transform: uppercase; opacity: 0.5; letter-spacing: 0.5px; }
         .box-card { 
             background: var(--tg-theme-secondary-bg-color); 
-            border-radius: 12px; padding: 12px; margin-bottom: 10px; 
-            cursor: pointer; border: 2px solid transparent; transition: 0.2s;
+            border-radius: 15px; padding: 16px; margin-bottom: 12px; 
+            cursor: pointer; border: 2px solid transparent; transition: all 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
-        .box-card:active { border-color: var(--tg-theme-button-color); }
-        .box-title { font-weight: bold; font-size: 1.1em; margin-bottom: 4px; }
-        .box-info { font-size: 0.9em; opacity: 0.8; }
-        .box-desc { font-size: 0.85em; color: var(--tg-theme-hint-color); margin-top: 4px; }
-        
-        .section-title { font-size: 0.9em; font-weight: bold; margin: 15px 0 10px 5px; text-transform: uppercase; opacity: 0.6; }
+        .box-card:active { transform: scale(0.98); border-color: var(--tg-theme-button-color); }
+        .box-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+        .box-info { font-size: 14px; font-weight: 500; opacity: 0.9; color: var(--tg-theme-button-color); }
+        .box-desc { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 6px; line-height: 1.4; }
         .btn-custom { 
-            width: 100%; padding: 15px; background: #6c757d; color: white; 
-            border: none; border-radius: 12px; font-weight: bold; margin-top: 10px;
+            width: 100%; padding: 16px; background: #6c757d; color: white; 
+            border: none; border-radius: 15px; font-weight: 700; font-size: 15px; margin-top: 10px; cursor: pointer;
         }
     </style>
 </head>
 <body>
-
-    <div class="section-title">Выберите размер коробки:</div>
+    <div class="section-title">Готовые решения (Гуанчжоу)</div>
 
     <div class="box-card" onclick="selectBox(23, 17, 13, 0.6, 'MINI')">
-        <div class="box-title">Коробка MINI</div>
-        <div class="box-info">23x17x13 см, до 0.6 кг</div>
-        <div class="box-desc">Вещи (футболка, сумка, ремень, носки)</div>
+        <div class="box-title">Коробка MINI <span>📦</span></div>
+        <div class="box-info">23x17x13 см • до 0.6 кг</div>
+        <div class="box-desc">Идеально для: футболки, сумки, ремня или носков.</div>
     </div>
 
     <div class="box-card" onclick="selectBox(36, 26, 14, 1.5, 'SMALL')">
-        <div class="box-title">Коробка SMALL</div>
-        <div class="box-info">36x26x14 см, до 1.5 кг</div>
-        <div class="box-desc">Пара обуви в коробке</div>
+        <div class="box-title">Коробка SMALL <span>📦</span></div>
+        <div class="box-info">36x26x14 см • до 1.5 кг</div>
+        <div class="box-desc">Оптимально для одной пары обуви в коробке.</div>
     </div>
 
     <div class="box-card" onclick="selectBox(40, 29, 16, 2.5, 'LARGE')">
-        <div class="box-title">Коробка LARGE</div>
-        <div class="box-info">40x29x16 см, до 2.5 кг</div>
-        <div class="box-desc">Пара обуви + несколько вещей</div>
+        <div class="box-title">Коробка LARGE <span>📦</span></div>
+        <div class="box-info">40x29x16 см • до 2.5 кг</div>
+        <div class="box-desc">Подойдет для пары обуви и нескольких вещей.</div>
     </div>
 
     <div class="box-card" onclick="selectBox(37, 29, 28, 3.5, 'X-LARGE')">
-        <div class="box-title">Коробка X-LARGE</div>
-        <div class="box-info">37x29x28 см, до 3.5 кг</div>
-        <div class="box-desc">Две пары обуви + вещи</div>
+        <div class="box-title">Коробка X-LARGE <span>📦</span></div>
+        <div class="box-info">37x29x28 см • до 3.5 кг</div>
+        <div class="box-desc">Для двух пар обуви и дополнительной одежды.</div>
     </div>
 
-    <div class="section-title">Или другой запрос:</div>
-    <button class="btn-custom" onclick="contactSupport()">Свой вариант / Связаться</button>
+    <div class="section-title">Индивидуальный расчет</div>
+    <button class="btn-custom" onclick="contactSupport()">Свой вариант / Связаться с нами</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
         function selectBox(l, w, h, weight, name) {
-            const data = {
+            tg.sendData(JSON.stringify({
                 l: l, w: w, h: h,
                 weight: weight,
-                price: 100, // Значение по умолчанию для быстрой проверки
-                catId: 19,  // Категория "Одежда/Обувь" по умолчанию
+                price: 100, 
+                catId: 19,
                 boxName: name
-            };
-            tg.sendData(JSON.stringify(data));
+            }));
         }
 
         function contactSupport() {
-            // Отправляем специальный флаг боту, чтобы он понял, что нужен контакт
             tg.sendData(JSON.stringify({action: 'support'}));
         }
     </script>
