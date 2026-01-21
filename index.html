@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NWS Calculator</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #ffffff);
+            --text-color: var(--tg-theme-text-color, #000000);
+            --hint-color: var(--tg-theme-hint-color, #999999);
+            --button-color: var(--tg-theme-button-color, #2481cc);
+            --button-text: var(--tg-theme-button-text-color, #ffffff);
+            --secondary-bg: var(--tg-theme-secondary-bg-color, #f0f0f0);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--hint-color);
+        }
+
+        input, select {
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid var(--secondary-bg);
+            background-color: var(--secondary-bg);
+            color: var(--text-color);
+            font-size: 16px;
+            outline: none;
+        }
+
+        .grid-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            background-color: var(--button-color);
+            color: var(--button-text);
+            border: none;
+            padding: 15px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        #result {
+            padding: 15px;
+            border-radius: 10px;
+            background-color: var(--secondary-bg);
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="input-group">
+        <label>Категория товара</label>
+        <select id="category">
+            <option value="12">Компьютеры</option>
+            <option value="13">Бытовая техника</option>
+            <option value="19">Женская одежда</option>
+            <option value="220">Мужская одежда</option>
+            <option value="225">Игрушки</option>
+            </select>
+    </div>
+
+    <div class="grid-inputs">
+        <div class="input-group">
+            <label>Длина (см)</label>
+            <input type="number" id="length" placeholder="40">
+        </div>
+        <div class="input-group">
+            <label>Ширина (см)</label>
+            <input type="number" id="width" placeholder="30">
+        </div>
+        <div class="input-group">
+            <label>Высота (см)</label>
+            <input type="number" id="height" placeholder="20">
+        </div>
+        <div class="input-group">
+            <label>Вес (кг)</label>
+            <input type="number" id="weight" placeholder="5.5">
+        </div>
+    </div>
+
+    <div class="input-group">
+        <label>Стоимость товара ($)</label>
+        <input type="number" id="price" placeholder="100">
+    </div>
+
+    <button onclick="calculate()">Рассчитать доставку</button>
+
+    <div id="result"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+
+        function calculate() {
+            const data = {
+                l: document.getElementById('length').value,
+                w: document.getElementById('width').value,
+                h: document.getElementById('height').value,
+                weight: document.getElementById('weight').value,
+                price: document.getElementById('price').value,
+                catId: document.getElementById('category').value
+            };
+
+            if (!data.l || !data.weight || !data.price) {
+                alert("Пожалуйста, заполните все поля");
+                return;
+            }
+
+            // Показываем прелоадер в кнопке Telegram
+            tg.MainButton.text = "Отправка данных...";
+            tg.MainButton.show();
+
+            // Отправляем данные боту
+            tg.sendData(JSON.stringify(data));
+        }
+    </script>
+</body>
+</html>
