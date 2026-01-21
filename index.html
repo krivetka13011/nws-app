@@ -2,52 +2,76 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; background-color: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); padding: 20px; }
-        .input-group { margin-bottom: 15px; background: var(--tg-theme-secondary-bg-color); padding: 10px; border-radius: 10px; }
-        input, select { width: 100%; padding: 10px; border: none; border-radius: 5px; margin-top: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); border: none; border-radius: 10px; font-weight: bold; }
+        body { font-family: sans-serif; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); padding: 15px; }
+        .box-card { 
+            background: var(--tg-theme-secondary-bg-color); 
+            border-radius: 12px; padding: 12px; margin-bottom: 10px; 
+            cursor: pointer; border: 2px solid transparent; transition: 0.2s;
+        }
+        .box-card:active { border-color: var(--tg-theme-button-color); }
+        .box-title { font-weight: bold; font-size: 1.1em; margin-bottom: 4px; }
+        .box-info { font-size: 0.9em; opacity: 0.8; }
+        .box-desc { font-size: 0.85em; color: var(--tg-theme-hint-color); margin-top: 4px; }
+        
+        .section-title { font-size: 0.9em; font-weight: bold; margin: 15px 0 10px 5px; text-transform: uppercase; opacity: 0.6; }
+        .btn-custom { 
+            width: 100%; padding: 15px; background: #6c757d; color: white; 
+            border: none; border-radius: 12px; font-weight: bold; margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-    <div class="input-group">
-        <label>Категория</label>
-        <select id="catId">
-            <option value="12">Компьютеры</option>
-            <option value="19">Одежда</option>
-            <option value="225">Игрушки</option>
-        </select>
+
+    <div class="section-title">Выберите размер коробки:</div>
+
+    <div class="box-card" onclick="selectBox(23, 17, 13, 0.6, 'MINI')">
+        <div class="box-title">Коробка MINI</div>
+        <div class="box-info">23x17x13 см, до 0.6 кг</div>
+        <div class="box-desc">Вещи (футболка, сумка, ремень, носки)</div>
     </div>
-    <div class="input-group">
-        <label>Габариты (Д/Ш/В см) и Вес (кг)</label>
-        <div style="display: flex; gap: 5px;">
-            <input type="number" id="l" placeholder="Д">
-            <input type="number" id="w" placeholder="Ш">
-            <input type="number" id="h" placeholder="В">
-            <input type="number" id="weight" placeholder="Кг">
-        </div>
+
+    <div class="box-card" onclick="selectBox(36, 26, 14, 1.5, 'SMALL')">
+        <div class="box-title">Коробка SMALL</div>
+        <div class="box-info">36x26x14 см, до 1.5 кг</div>
+        <div class="box-desc">Пара обуви в коробке</div>
     </div>
-    <div class="input-group">
-        <label>Цена товара ($)</label>
-        <input type="number" id="price" placeholder="100">
+
+    <div class="box-card" onclick="selectBox(40, 29, 16, 2.5, 'LARGE')">
+        <div class="box-title">Коробка LARGE</div>
+        <div class="box-info">40x29x16 см, до 2.5 кг</div>
+        <div class="box-desc">Пара обуви + несколько вещей</div>
     </div>
-    <button onclick="sendData()">РАССЧИТАТЬ</button>
+
+    <div class="box-card" onclick="selectBox(37, 29, 28, 3.5, 'X-LARGE')">
+        <div class="box-title">Коробка X-LARGE</div>
+        <div class="box-info">37x29x28 см, до 3.5 кг</div>
+        <div class="box-desc">Две пары обуви + вещи</div>
+    </div>
+
+    <div class="section-title">Или другой запрос:</div>
+    <button class="btn-custom" onclick="contactSupport()">Свой вариант / Связаться</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        function sendData() {
-            const d = {
-                l: document.getElementById('l').value,
-                w: document.getElementById('w').value,
-                h: document.getElementById('h').value,
-                weight: document.getElementById('weight').value,
-                price: document.getElementById('price').value,
-                catId: document.getElementById('catId').value
+
+        function selectBox(l, w, h, weight, name) {
+            const data = {
+                l: l, w: w, h: h,
+                weight: weight,
+                price: 100, // Значение по умолчанию для быстрой проверки
+                catId: 19,  // Категория "Одежда/Обувь" по умолчанию
+                boxName: name
             };
-            tg.sendData(JSON.stringify(d));
+            tg.sendData(JSON.stringify(data));
+        }
+
+        function contactSupport() {
+            // Отправляем специальный флаг боту, чтобы он понял, что нужен контакт
+            tg.sendData(JSON.stringify({action: 'support'}));
         }
     </script>
 </body>
