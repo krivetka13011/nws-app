@@ -5,103 +5,144 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); padding: 15px; margin: 0; }
-        .section-title { font-size: 13px; font-weight: 600; margin: 10px 5px; text-transform: uppercase; opacity: 0.5; letter-spacing: 0.5px; }
+        :root { --main-color: var(--tg-theme-button-color, #248b65); }
+        body { font-family: -apple-system, sans-serif; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); margin: 0; padding-bottom: 80px; }
         
-        /* Стили карточек */
-        .box-card { 
-            background: var(--tg-theme-secondary-bg-color); 
-            border-radius: 15px; padding: 16px; margin-bottom: 12px; 
-            cursor: pointer; border: 2px solid transparent; transition: all 0.2s ease;
-        }
-        .box-card:active { transform: scale(0.98); border-color: var(--tg-theme-button-color); }
-        .box-title { font-weight: 700; font-size: 17px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
-        .box-info { font-size: 14px; font-weight: 500; opacity: 0.9; color: var(--tg-theme-button-color); }
-        .box-desc { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 6px; }
-        .box-price { font-size: 12px; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 10px; font-weight: bold; }
+        /* Табы */
+        .tabs { display: flex; sticky: top; background: var(--tg-theme-secondary-bg-color); padding: 5px; gap: 5px; }
+        .tab { flex: 1; padding: 10px; text-align: center; border-radius: 10px; font-weight: bold; cursor: pointer; opacity: 0.6; font-size: 14px; }
+        .tab.active { background: var(--tg-theme-bg-color); opacity: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 
-        /* Стили опций */
-        .options-box {
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 15px; padding: 16px; margin-bottom: 20px;
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .option-label { font-weight: 600; font-size: 15px; }
+        .content { padding: 15px; display: none; }
+        .content.active { display: block; }
+
+        /* Общие стили */
+        .section-title { font-size: 12px; font-weight: 600; margin: 15px 5px 5px; text-transform: uppercase; opacity: 0.5; }
+        .box-card, .order-item { background: var(--tg-theme-secondary-bg-color); border-radius: 15px; padding: 15px; margin-bottom: 15px; }
         
-        /* Переключатель (Toggle) */
-        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
-        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--tg-theme-button-color); }
-        input:checked + .slider:before { transform: translateX(20px); }
-
-        .btn-custom { 
-            width: 100%; padding: 16px; background: #6c757d; color: white; 
-            border: none; border-radius: 15px; font-weight: 700; font-size: 15px; margin-top: 10px;
-        }
+        /* Стили выкупа */
+        input { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); margin-bottom: 10px; font-size: 14px; }
+        .btn-add { background: var(--main-color); color: white; border: none; padding: 10px; border-radius: 10px; width: 100%; font-weight: bold; margin-bottom: 20px; }
+        
+        /* Стили калькулятора (ваши прежние) */
+        .box-title { font-weight: 700; display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .box-price { font-size: 12px; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 10px; }
+        
+        .footer-btn { position: fixed; bottom: 15px; left: 15px; right: 15px; padding: 16px; background: var(--main-color); color: white; border: none; border-radius: 15px; font-weight: 700; z-index: 100; }
     </style>
 </head>
 <body>
-    <div class="section-title">Дополнительные услуги</div>
-    <div class="options-box">
-        <div class="option-label">Деревянная обрешетка (+300 ₽)</div>
-        <label class="switch">
-            <input type="checkbox" id="crate-toggle">
-            <span class="slider"></span>
-        </label>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('calc')">Доставка</div>
+        <div class="tab" onclick="switchTab('buyout')">Выкуп</div>
     </div>
 
-    <div class="section-title">Упаковки</div>
-
-    <div class="box-card" onclick="selectBox(23, 17, 13, 0.6, 'MINI', 679)">
-        <div class="box-title">MINI <span class="box-price">679 ₽</span></div>
-        <div class="box-info">23x17x13 см • до 0.6 кг</div>
-        <div class="box-desc">Аксессуары, футболки, мелкие вещи.</div>
+    <div id="calc" class="content active">
+        <div class="section-title">Упаковки</div>
+        <div class="box-card" onclick="sendCalc(23,17,13,0.6,'MINI',679)">
+            <div class="box-title">MINI <span class="box-price">679 ₽</span></div>
+            <div>23x17x13 см • до 0.6 кг</div>
+        </div>
+        <div class="box-card" onclick="sendCalc(36,26,14,1.5,'SMALL',1562)">
+            <div class="box-title">SMALL <span class="box-price">1562 ₽</span></div>
+            <div>36x26x14 см • до 1.5 кг</div>
+        </div>
+        <div class="box-card" onclick="sendCalc(40,29,16,2.5,'LARGE',2411)">
+            <div class="box-title">LARGE <span class="box-price">2411 ₽</span></div>
+            <div>40x29x16 см • до 2.5 кг</div>
+        </div>
+        <div class="box-card" onclick="sendCalc(37,29,28,3.5,'X-LARGE',3489)">
+            <div class="box-title">X-LARGE <span class="box-price">3489 ₽</span></div>
+            <div>37x29x28 см • до 3.5 кг</div>
+        </div>
+        <button class="btn-add" style="background:#6c757d" onclick="sendSupport()">Свой вариант / Связаться</button>
     </div>
 
-    <div class="box-card" onclick="selectBox(36, 26, 14, 1.5, 'SMALL', 1562)">
-        <div class="box-title">SMALL <span class="box-price">1562 ₽</span></div>
-        <div class="box-info">36x26x14 см • до 1.5 кг</div>
-        <div class="box-desc">Одна пара обуви в коробке.</div>
-    </div>
+    <div id="buyout" class="content">
+        <div id="items-container">
+            <div class="order-item" id="item-1">
+                <div class="section-title" style="margin-top:0">Товар №1</div>
+                <input type="file" accept="image/*" class="item-img" placeholder="Скриншот товара">
+                <input type="text" class="item-link" placeholder="Ссылка на товар">
+                <input type="number" class="item-price" placeholder="Цена в юанях (¥)" oninput="recalcAll()">
+            </div>
+        </div>
+        <button class="btn-add" onclick="addItem()">+ Добавить товар</button>
+        
+        <div class="box-card" id="total-block" style="display:none">
+            <div style="font-weight:bold">Итого к выкупу:</div>
+            <div id="total-res" style="color:var(--main-color); font-size: 18px; margin-top:5px;">0 ¥ = 0 ₽</div>
+        </div>
 
-    <div class="box-card" onclick="selectBox(40, 29, 16, 2.5, 'LARGE', 2411)">
-        <div class="box-title">LARGE <span class="box-price">2411 ₽</span></div>
-        <div class="box-info">40x29x16 см • до 2.5 кг</div>
-        <div class="box-desc">Пара обуви + одежда.</div>
+        <button class="footer-btn" id="order-btn" onclick="sendOrder()">Оформить выкуп</button>
     </div>
-
-    <div class="box-card" onclick="selectBox(37, 29, 28, 3.5, 'X-LARGE', 3489)">
-        <div class="box-title">X-LARGE <span class="box-price">3489 ₽</span></div>
-        <div class="box-info">37x29x28 см • до 3.5 кг</div>
-        <div class="box-desc">Две пары обуви + вещи.</div>
-    </div>
-
-    <div class="section-title">Индивидуальный расчет</div>
-    <button class="btn-custom" onclick="contactSupport()">Свой вариант / Связаться</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        function selectBox(l, w, h, weight, name, basePrice) {
-            const hasCrate = document.getElementById('crate-toggle').checked;
-            const finalPackPrice = hasCrate ? basePrice + 300 : basePrice;
-            
-            tg.sendData(JSON.stringify({
-                l: l, w: w, h: h,
-                weight: weight,
-                price: 100, 
-                catId: 19,
-                boxName: name,
-                packPrice: finalPackPrice,
-                hasCrate: hasCrate
-            }));
+        function switchTab(id) {
+            document.querySelectorAll('.tab, .content').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.currentTarget.classList.add('active');
         }
 
-        function contactSupport() {
-            tg.sendData(JSON.stringify({action: 'support'}));
+        let itemCount = 1;
+        function addItem() {
+            itemCount++;
+            const container = document.getElementById('items-container');
+            const newItem = document.createElement('div');
+            newItem.className = 'order-item';
+            newItem.innerHTML = `
+                <div class="section-title" style="margin-top:0">Товар №${itemCount}</div>
+                <input type="file" accept="image/*" class="item-img">
+                <input type="text" class="item-link" placeholder="Ссылка на товар">
+                <input type="number" class="item-price" placeholder="Цена в юанях (¥)" oninput="recalcAll()">
+            `;
+            container.appendChild(newItem);
+        }
+
+        function recalcAll() {
+            let totalYuan = 0;
+            const prices = document.querySelectorAll('.item-price');
+            prices.forEach(input => {
+                let val = Math.ceil(parseFloat(input.value) || 0);
+                if (val > 0) {
+                    totalYuan += (val + 30) * 1.05;
+                }
+            });
+            
+            if (totalYuan > 0) {
+                document.getElementById('total-block').style.display = 'block';
+                document.getElementById('total-res').innerText = `${totalYuan.toFixed(2)} ¥ = ${Math.ceil(totalYuan * 13)} ₽`;
+            } else {
+                document.getElementById('total-block').style.display = 'none';
+            }
+        }
+
+        function sendCalc(l, w, h, weight, name, packPrice) {
+            tg.sendData(JSON.stringify({ type: 'calc', l, w, h, weight, boxName: name, packPrice }));
+        }
+
+        function sendSupport() { tg.sendData(JSON.stringify({ type: 'support' })); }
+
+        function sendOrder() {
+            const items = [];
+            document.querySelectorAll('.order-item').forEach(el => {
+                const price = Math.ceil(parseFloat(el.querySelector('.item-price').value) || 0);
+                if (price > 0) {
+                    items.push({
+                        link: el.querySelector('.item-link').value,
+                        price: price,
+                        calcYuan: ((price + 30) * 1.05).toFixed(2)
+                    });
+                }
+            });
+
+            if (items.length === 0) return alert('Добавьте хотя бы один товар с ценой');
+
+            tg.sendData(JSON.stringify({ type: 'order', items: items }));
         }
     </script>
 </body>
