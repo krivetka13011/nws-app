@@ -16,15 +16,33 @@
         .content.active { display: block; }
 
         .section-title { font-size: 12px; font-weight: 600; margin: 15px 5px 8px; text-transform: uppercase; opacity: 0.5; }
-        .box-card, .order-item { background: var(--bg-secondary); border-radius: 15px; padding: 15px; margin-bottom: 12px; border: 2px solid transparent; }
+        
+        .order-item { 
+            background: var(--bg-secondary); 
+            border-radius: 15px; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            position: relative; 
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        .btn-delete-item {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            z-index: 10;
+        }
+
+        .box-card { background: var(--bg-secondary); border-radius: 15px; padding: 15px; margin-bottom: 12px; cursor: pointer; }
         
         input { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); margin-bottom: 8px; font-size: 14px; }
-        input[type="file"] { padding: 8px; font-size: 12px; border: 1px dashed var(--main-color); }
-        
-        .controls { display: flex; gap: 10px; margin-top: 10px; }
-        .btn-add { flex: 3; background: var(--main-color); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; }
-        .btn-del { flex: 1; background: #eb4034; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+        input[type="file"] { padding: 8px; font-size: 12px; border: 1px dashed var(--main-color); margin-top: 5px; }
 
+        .btn-add { background: var(--main-color); color: white; border: none; padding: 14px; border-radius: 12px; width: 100%; font-weight: bold; margin-bottom: 20px; }
         .footer-btn { position: fixed; bottom: 15px; left: 15px; right: 15px; padding: 18px; background: var(--main-color); color: white; border: none; border-radius: 15px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         
         .options-box { background: var(--bg-secondary); border-radius: 15px; padding: 15px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
@@ -44,34 +62,34 @@
     </div>
 
     <div id="calc" class="content active">
-        <div class="section-title">Дополнительно</div>
+        <div class="section-title">Опции</div>
         <div class="options-box">
             <span>Обрешетка (+300 ₽)</span>
             <label class="switch"><input type="checkbox" id="crate-toggle"><span class="slider"></span></label>
         </div>
-        <div class="section-title">Упаковки</div>
+        <div class="section-title">Варианты коробок</div>
         <div class="box-card" onclick="sendCalc(23,17,13,0.6,'MINI',679)">
-            <div style="font-weight:bold; display:flex; justify-content:space-between;">MINI <span>679 ₽</span></div>
-            <div style="font-size:12px; opacity:0.7;">23x17x13 см • до 0.6 кг</div>
+            <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка MINI <span>679 ₽</span></div>
+            <div style="font-size:12px; opacity:0.7; margin-top:4px;">23x17x13 см, до 0,6 кг</div>
         </div>
         <div class="box-card" onclick="sendCalc(36,26,14,1.5,'SMALL',1562)">
-            <div style="font-weight:bold; display:flex; justify-content:space-between;">SMALL <span>1562 ₽</span></div>
-            <div style="font-size:12px; opacity:0.7;">36x26x14 см • до 1.5 кг</div>
+            <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка SMALL <span>1562 ₽</span></div>
+            <div style="font-size:12px; opacity:0.7; margin-top:4px;">36x26x14 см, до 1,5 кг</div>
         </div>
         <div class="box-card" onclick="sendCalc(40,29,16,2.5,'LARGE',2411)">
-            <div style="font-weight:bold; display:flex; justify-content:space-between;">LARGE <span>2411 ₽</span></div>
-            <div style="font-size:12px; opacity:0.7;">40x29x16 см • до 2.5 кг</div>
+            <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка LARGE <span>2411 ₽</span></div>
+            <div style="font-size:12px; opacity:0.7; margin-top:4px;">40x29x16 см, до 2,5 кг</div>
         </div>
-        <div class="box-card" onclick="sendCalc(37,29,28,3.5,'X-LARGE',3489)">
-            <div style="font-weight:bold; display:flex; justify-content:space-between;">X-LARGE <span>3489 ₽</span></div>
-            <div style="font-size:12px; opacity:0.7;">37x29x28 см • до 3.5 кг</div>
+        <div class="box-card" onclick="sendCalc(37,29,28,3.5,'Y-08',3489)">
+            <div style="font-weight:bold; display:flex; justify-content:space-between;">Коробка Y-08 <span>3489 ₽</span></div>
+            <div style="font-size:12px; opacity:0.7; margin-top:4px;">37x29x28 см, до 3,5 кг</div>
         </div>
     </div>
 
     <div id="buyout" class="content">
         <div id="items-container">
             <div class="order-item">
-                <div class="section-title" style="margin-top:0">Товар №1</div>
+                <div class="section-title" style="margin-top:0">ТОВАР №1</div>
                 <input type="text" class="item-link" placeholder="Ссылка на товар">
                 <input type="number" class="item-price" placeholder="Цена в юанях (¥)" oninput="recalc()">
                 <div style="font-size:11px; margin-bottom:4px; opacity:0.6;">Скриншот товара:</div>
@@ -79,16 +97,13 @@
             </div>
         </div>
         
-        <div class="controls">
-            <button class="btn-add" onclick="addItem()">+ Товар</button>
-            <button class="btn-del" onclick="delItem()">🗑️</button>
-        </div>
+        <button class="btn-add" onclick="addItem()">+ Добавить товар</button>
 
         <div id="total-block" class="box-card" style="margin-top:20px; text-align:center; display:none;">
             <div style="font-weight:bold; opacity:0.7">Итого к выкупу:</div>
             <div id="total-res" style="font-size:20px; font-weight:800; color:var(--main-color);"></div>
         </div>
-        <button class="footer-btn" onclick="sendOrder()">Разместить заказ</button>
+        <button class="footer-btn" onclick="sendOrder()">Оформить выкуп</button>
     </div>
 
     <script>
@@ -101,26 +116,29 @@
             event.currentTarget.classList.add('active');
         }
 
-        let count = 1;
         function addItem() {
-            count++;
+            const container = document.getElementById('items-container');
+            const items = container.getElementsByClassName('order-item');
+            const nextNum = items.length + 1;
+
             const div = document.createElement('div');
             div.className = 'order-item';
-            div.innerHTML = `<div class="section-title" style="margin-top:0">Товар №${count}</div>
-                             <input type="text" class="item-link" placeholder="Ссылка на товар">
-                             <input type="number" class="item-price" placeholder="Цена в юанях (¥)" oninput="recalc()">
-                             <div style="font-size:11px; margin-bottom:4px; opacity:0.6;">Скриншот товара:</div>
-                             <input type="file" class="item-file" accept="image/*">`;
-            document.getElementById('items-container').appendChild(div);
+            div.innerHTML = `
+                <button class="btn-delete-item" onclick="removeThisItem(this)">🗑️</button>
+                <div class="section-title" style="margin-top:0">ТОВАР №${nextNum}</div>
+                <input type="text" class="item-link" placeholder="Ссылка на товар">
+                <input type="number" class="item-price" placeholder="Цена в юанях (¥)" oninput="recalc()">
+                <div style="font-size:11px; margin-bottom:4px; opacity:0.6;">Скриншот товара:</div>
+                <input type="file" class="item-file" accept="image/*">
+            `;
+            container.appendChild(div);
         }
 
-        function delItem() {
-            if (count > 1) {
-                const container = document.getElementById('items-container');
-                container.removeChild(container.lastElementChild);
-                count--;
-                recalc();
-            }
+        function removeThisItem(btn) {
+            btn.parentElement.remove();
+            recalc();
+            const titles = document.querySelectorAll('#items-container .section-title');
+            titles.forEach((t, i) => { t.innerText = `ТОВАР №${i + 1}`; });
         }
 
         function recalc() {
@@ -138,7 +156,10 @@
 
         function sendCalc(l, w, h, weight, name, price) {
             const crate = document.getElementById('crate-toggle').checked;
-            tg.sendData(JSON.stringify({ type: 'calc', l, w, h, weight, boxName: name, packPrice: crate ? price + 300 : price, hasCrate: crate }));
+            tg.sendData(JSON.stringify({ 
+                type: 'calc', l, w, h, weight, boxName: name, 
+                packPrice: crate ? price + 300 : price, hasCrate: crate 
+            }));
         }
 
         function sendOrder() {
@@ -151,11 +172,11 @@
                         link: el.querySelector('.item-link').value, 
                         price: p, 
                         resYuan: ((p + 30) * 1.05).toFixed(2),
-                        hasPhoto: fileInput.files.length > 0 ? "Прикреплено" : "Нет" 
+                        photoSelected: fileInput.files.length > 0 ? "Да" : "Нет"
                     });
                 }
             });
-            if (!items.length) return alert('Добавьте цену товара');
+            if (!items.length) return alert('Добавьте хотя бы один товар');
             tg.sendData(JSON.stringify({ type: 'order', items }));
         }
     </script>
