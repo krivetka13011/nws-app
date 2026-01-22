@@ -164,7 +164,7 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const IMGBB_KEY = '31f08c6b63da5f9c590209e743ace5f0';
+    const IMGBB_KEY = '412d2791dd8620104d0849b745f489e0'; 
 
     function switchTab(id) {
         document.querySelectorAll('.tab, .content').forEach(el => el.classList.remove('active'));
@@ -293,5 +293,34 @@
                 break;
             }
             const imgUrls = [];
-            for (
+            for (let file of files) {
+                const imgUrl = await uploadToImgBB(file);
+                if (!imgUrl) {
+                    allValid = false;
+                    break;
+                }
+                imgUrls.push(imgUrl);
+            }
+            if (!allValid) break;
+            items.push({
+                link: link,
+                price: p,
+                resYuan: ((p + 30) * 1.05).toFixed(2),
+                imgUrls: imgUrls 
+            });
+        }
 
+        if (allValid && items.length > 0) {
+            tg.sendData(JSON.stringify({ type: 'order', items }));
+        }
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+
+    function sendCalc(l, w, h, weight, name, price) {
+        const crate = document.getElementById('crate-toggle').checked;
+        tg.sendData(JSON.stringify({ type: 'calc', l, w, h, weight, boxName: name, packPrice: crate ? price + 300 : price, hasCrate: crate }));
+    }
+</script>
+</body>
+</html>
