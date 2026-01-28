@@ -19,14 +19,20 @@
             --border-color: #3a3a3c;
         }
 
+        html {
+            height: 100%;
+        }
+
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            /* Увеличили отступ снизу, чтобы контент не перекрывался фиксированными кнопками */
-            padding-bottom: 160px; 
+            /* УВЕЛИЧИЛ ОТСТУП СНИЗУ, чтобы можно было долистать до конца */
+            padding-bottom: 220px; 
+            min-height: 100vh;
             overflow-x: hidden;
             -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
         }
 
         /* Карточки */
@@ -44,7 +50,6 @@
             font-weight: 600;
             font-size: 18px;
             transition: transform 0.1s, opacity 0.2s;
-            /* Текст строго по центру */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -62,7 +67,6 @@
             font-weight: 600;
             font-size: 16px;
             transition: background-color 0.2s;
-            /* Текст строго по центру */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -71,13 +75,14 @@
             background-color: rgba(59, 130, 246, 0.2);
         }
 
-        /* Поля ввода */
+        /* Поля ввода - ИСПРАВЛЕН ОТСТУП */
         input, textarea {
             background-color: var(--input-bg);
             color: var(--text-color);
             border: 1px solid transparent;
             border-radius: 16px;
-            padding: 16px;
+            /* Увеличил горизонтальный padding до 24px */
+            padding: 16px 24px; 
             width: 100%;
             font-size: 17px;
             transition: border-color 0.2s;
@@ -95,7 +100,7 @@
             background-color: var(--input-bg);
             color: var(--text-color);
             border-radius: 16px;
-            padding: 18px;
+            padding: 18px 24px; /* Тоже увеличил отступ */
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -108,7 +113,7 @@
             background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 18px 20px; /* Увеличили внутренние отступы */
+            padding: 18px 20px;
             cursor: pointer;
             transition: all 0.2s;
             position: relative;
@@ -175,7 +180,7 @@
         }
 
         .sheet-option {
-            padding: 20px 16px; /* Больше отступов */
+            padding: 20px 16px;
             border-bottom: 1px solid var(--border-color);
             color: var(--text-color);
             display: flex;
@@ -203,7 +208,7 @@
             margin-bottom: 10px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding-left: 2px; /* Чуть сдвинули метку */
+            padding-left: 2px;
         }
 
         /* Tab Animation */
@@ -219,16 +224,15 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Fixed Areas - ИСПРАВЛЕНИЕ НАЛОЖЕНИЯ */
+        /* Fixed Areas */
         .action-bar {
             position: fixed;
             bottom: 65px;
             left: 0;
             width: 100%;
             padding: 12px 16px;
-            /* Сплошной фон, чтобы контент не просвечивал */
             background-color: var(--bg-color); 
-            border-top: 1px solid var(--border-color); /* Разделитель */
+            border-top: 1px solid var(--border-color); 
             z-index: 40;
             box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
         }
@@ -238,7 +242,7 @@
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 65px; /* Чуть выше навигация */
+            height: 65px;
             background-color: var(--card-bg);
             border-top: 1px solid var(--border-color);
             display: flex;
@@ -471,7 +475,6 @@
     </div>
 
     <script>
-        // КЛЮЧ ИЗ ВАШЕГО РАБОЧЕГО КОДА
         const IMGBB_KEY = '412d2791dd8620104d0849b745f489e0'; 
         
         const tg = window.Telegram.WebApp;
@@ -486,7 +489,7 @@
         let searchItems = [];
         let deliveryType = 'grey'; 
 
-        // --- 1. ФУНКЦИЯ СЖАТИЯ ФОТО (ИЗ ВАШЕГО КОДА) ---
+        // --- 1. ФУНКЦИЯ СЖАТИЯ ФОТО ---
         async function compressImage(file, maxWidth = 1024, maxHeight = 1024, quality = 0.85) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -647,13 +650,11 @@
                             <span id="res-rub-${id}" class="text-xl font-bold text-[var(--text-secondary)]">0 ₽</span>
                         </div>
                     </div>
-                    <!-- Photo container -->
                     <div class="flex flex-wrap gap-2 items-center" id="preview-area-${id}">
                         <label class="photo-btn hover:border-blue-500 transition-colors">
                             <i class="fas fa-camera"></i>
                             <input type="file" accept="image/*" multiple class="hidden" onchange="handleImageUpload(this, ${id}, 'order')">
                         </label>
-                        <!-- Previews will appear here -->
                     </div>
                 </div>
             `;
@@ -744,18 +745,12 @@
             });
         }
 
-        // --- 2. НОВАЯ ЛОГИКА ЗАГРУЗКИ С MULTIPLE И УДАЛЕНИЕМ ---
+        // --- 2. НОВАЯ ЛОГИКА ЗАГРУЗКИ ---
         async function handleImageUpload(input, id, type) {
             const files = input.files;
             if (!files || files.length === 0) return;
 
             const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
-            // Вставляем лоадер перед кнопкой загрузки (кнопка - первый элемент в flex container, но мы используем insertAdjacentHTML)
-            // Чтобы порядок был верным (фото слева направо), фото будут добавляться перед кнопкой.
-            // Но кнопка у нас в HTML стоит первой. Сделаем, чтобы фото добавлялись ПЕРЕД кнопкой? Нет, обычно фото идут списком, а кнопка "+" в конце.
-            // В текущей верстке кнопка label внутри div.
-            
-            // Мы будем вставлять фото ПЕРЕД кнопкой (label)
             const btnLabel = previewArea.querySelector('label');
 
             for (let i = 0; i < files.length; i++) {
@@ -763,7 +758,6 @@
                 const loadId = `load-${Date.now()}-${i}`;
                 const loadingHtml = `<div id="${loadId}" class="photo-btn animate-pulse border-none"><i class="fas fa-spinner fa-spin text-white"></i></div>`;
                 
-                // Вставляем лоадер перед кнопкой
                 btnLabel.insertAdjacentHTML('beforebegin', loadingHtml);
 
                 try {
@@ -787,7 +781,6 @@
                         const item = list.find(i => i.id === id);
                         if (item) item.imgUrls.push(imgUrl);
 
-                        // Создаем элемент превью с кнопкой удаления
                         const imgDiv = document.createElement('div');
                         imgDiv.className = 'preview-item';
                         imgDiv.innerHTML = `
@@ -806,7 +799,6 @@
                     tg.showAlert("Ошибка сети");
                 }
             }
-            // Сбрасываем input, чтобы можно было загрузить те же фото снова при желании
             input.value = '';
         }
 
@@ -816,7 +808,6 @@
             if (item) {
                 item.imgUrls = item.imgUrls.filter(url => url !== imgUrl);
             }
-            // Удаляем DOM элемент (родитель кнопки удаления - .preview-item)
             btnElement.parentElement.remove();
         }
 
