@@ -9,54 +9,189 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --tg-theme-bg-color: #ffffff;
-            --tg-theme-text-color: #000000;
-            --tg-theme-hint-color: #999999;
-            --tg-theme-link-color: #2481cc;
-            --tg-theme-button-color: #2481cc;
-            --tg-theme-button-text-color: #ffffff;
-            --tg-theme-secondary-bg-color: #f4f4f5;
+            /* Принудительная темная тема */
+            --bg-color: #0f0f0f;
+            --card-bg: #1c1c1e;
+            --text-color: #ffffff;
+            --text-secondary: #98989e;
+            --accent-color: #3b82f6;
+            --danger-color: #ef4444;
+            --input-bg: #2c2c2e;
+            --border-color: #3a3a3c;
+            --success-color: #34c759;
         }
+
         body {
-            background-color: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
+            background-color: var(--bg-color);
+            color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             padding-bottom: 140px; 
             overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
+
+        /* Карточки */
         .card {
-            background-color: var(--tg-theme-secondary-bg-color);
+            background-color: var(--card-bg);
             border-radius: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         }
+
+        /* Кнопки */
         .btn-main {
-            background-color: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
+            background-color: var(--accent-color);
+            color: #ffffff;
             border-radius: 16px;
             font-weight: 600;
-            transition: transform 0.1s;
+            transition: transform 0.1s, opacity 0.2s;
         }
         .btn-main:active {
             transform: scale(0.98);
+            opacity: 0.9;
         }
+
         .btn-secondary {
-            background-color: transparent;
-            border: 2px dashed var(--tg-theme-button-color);
-            color: var(--tg-theme-button-color);
+            background-color: rgba(59, 130, 246, 0.1);
+            border: 1px dashed var(--accent-color);
+            color: var(--accent-color);
             border-radius: 16px;
             font-weight: 600;
+            transition: background-color 0.2s;
         }
-        input, select, textarea {
-            background-color: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-            border: none;
-            border-radius: 12px;
-            padding: 12px;
+        .btn-secondary:active {
+            background-color: rgba(59, 130, 246, 0.2);
+        }
+
+        /* Поля ввода */
+        input, textarea {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid transparent;
+            border-radius: 14px;
+            padding: 14px;
             width: 100%;
-            font-size: 14px;
+            font-size: 15px;
+            transition: border-color 0.2s;
         }
-        input:focus, select:focus, textarea:focus {
-            outline: 2px solid var(--tg-theme-button-color);
+        input::placeholder, textarea::placeholder {
+            color: var(--text-secondary);
         }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        /* Custom Selector */
+        .custom-select-trigger {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border-radius: 14px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        .custom-select-trigger i {
+            color: var(--text-secondary);
+        }
+
+        /* Radio Group for Delivery Type */
+        .delivery-option {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        .delivery-option.active {
+            background-color: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent-color);
+        }
+        .delivery-option.active::after {
+            content: '\f00c';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: var(--accent-color);
+        }
+
+        /* Bottom Sheet */
+        .sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(3px);
+        }
+        .sheet-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .sheet-content {
+            position: fixed;
+            bottom: -100%;
+            left: 0;
+            right: 0;
+            background-color: var(--card-bg);
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+            z-index: 101;
+            padding: 20px 16px 40px 16px;
+            transition: bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .sheet-overlay.open .sheet-content {
+            bottom: 0;
+        }
+        
+        .sheet-handle {
+            width: 40px;
+            height: 4px;
+            background-color: #3a3a3c;
+            border-radius: 2px;
+            margin: 0 auto 20px auto;
+        }
+
+        .sheet-option {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+        }
+        .sheet-option:last-child {
+            border-bottom: none;
+        }
+        .sheet-option:active {
+            background-color: var(--input-bg);
+        }
+        .sheet-option.selected {
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+        .sheet-option.selected::after {
+            content: '\f00c';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+        }
+
+        /* Tabs Animation */
         .tab-content {
             display: none;
             animation: fadeIn 0.3s ease-in-out;
@@ -68,104 +203,94 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* Fixed Areas */
         .action-bar {
             position: fixed;
             bottom: 65px;
             left: 0;
             width: 100%;
             padding: 10px 16px;
-            background: linear-gradient(to top, var(--tg-theme-bg-color) 80%, transparent);
+            background: linear-gradient(to top, var(--bg-color) 80%, transparent);
             z-index: 40;
         }
+
         .bottom-nav {
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100%;
             height: 60px;
-            background-color: var(--tg-theme-bg-color);
-            border-top: 1px solid #e5e5e5;
+            background-color: var(--card-bg);
+            border-top: 1px solid var(--border-color);
             display: flex;
             justify-content: space-around;
             align-items: center;
             z-index: 50;
             padding-bottom: env(safe-area-inset-bottom);
         }
+
         .nav-item {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             font-size: 10px;
-            color: var(--tg-theme-hint-color);
+            color: var(--text-secondary);
             width: 33%;
             height: 100%;
             transition: color 0.2s;
         }
         .nav-item.active {
-            color: var(--tg-theme-button-color);
+            color: var(--accent-color);
         }
         .nav-item i {
             font-size: 20px;
             margin-bottom: 4px;
         }
-        .select-wrapper {
-            position: relative;
-        }
-        .select-wrapper::after {
-            content: '\f078';
-            font-family: 'Font Awesome 5 Free';
-            font-weight: 900;
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--tg-theme-hint-color);
-            pointer-events: none;
-        }
-        select {
-            appearance: none;
-            -webkit-appearance: none;
-        }
+
+        /* Photo Button */
         .photo-btn {
             width: 70px;
             height: 70px;
             border-radius: 16px;
-            background-color: #f0f0f0;
+            background-color: var(--input-bg);
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: background-color 0.2s;
+            border: 1px solid var(--border-color);
         }
-        .photo-btn:active {
-            background-color: #e0e0e0;
+        .photo-btn i {
+            color: var(--text-secondary);
         }
     </style>
 </head>
 <body class="p-4">
+
+    <!-- TAB 1: CALCULATOR -->
     <div id="tab-calc" class="tab-content active">
-        <h2 class="text-2xl font-bold mb-6 px-1">Калькулятор</h2>
+        <h2 class="text-2xl font-bold mb-6 px-1 text-white">Калькулятор</h2>
+        
         <div class="space-y-6">
-            <div class="card p-4">
-                <label class="block text-xs font-bold text-[var(--tg-theme-hint-color)] mb-2 uppercase tracking-wide">Выберите упаковку</label>
-                <div class="select-wrapper">
-                    <select id="boxType" class="w-full bg-white text-lg font-medium p-4 rounded-xl shadow-sm" onchange="updateCalc()">
-                        <option value="XS" data-price="900" data-desc="Мелкие аксессуары, чехлы, бижутерия">Коробка XS</option>
-                        <option value="S" data-price="1500" data-desc="Обувь (1 пара), косметика, футболки">Коробка S</option>
-                        <option value="M" data-price="2500" data-desc="Одежда (толстовки, джинсы), сумки">Коробка M</option>
-                        <option value="L" data-price="3800" data-desc="Верхняя одежда, пуховики, техника">Коробка L</option>
-                        <option value="XL" data-price="5000" data-desc="Крупные партии, объемные грузы">Коробка XL</option>
-                        <option value="custom">Свой размер</option>
-                    </select>
+            <div class="card p-5">
+                <label class="block text-xs font-bold text-[var(--text-secondary)] mb-3 uppercase tracking-wide">Упаковка</label>
+                
+                <!-- CUSTOM SELECT TRIGGER -->
+                <div class="custom-select-trigger" onclick="openBoxSheet()">
+                    <span id="selectedBoxName" class="font-medium">Выберите упаковку</span>
+                    <i class="fas fa-chevron-down text-sm"></i>
                 </div>
-                <div id="boxDesc" class="mt-3 text-sm text-[var(--tg-theme-hint-color)] bg-white/50 p-2 rounded-lg">
-                    Мелкие аксессуары, чехлы, бижутерия
+                
+                <div id="boxDesc" class="mt-3 text-sm text-[var(--text-secondary)] bg-[var(--input-bg)] p-3 rounded-xl hidden">
+                    <!-- Dynamic Description -->
                 </div>
             </div>
+
+            <!-- Custom Dimensions Input -->
             <div id="customDims" class="hidden animate-fade-in">
-                <div class="card p-4">
-                    <label class="block text-xs font-bold text-[var(--tg-theme-hint-color)] mb-2 uppercase tracking-wide">Габариты и Вес</label>
+                <div class="card p-5">
+                    <label class="block text-xs font-bold text-[var(--text-secondary)] mb-3 uppercase tracking-wide">Габариты и Вес</label>
                     <div class="grid grid-cols-2 gap-3 mb-3">
                         <input type="number" id="dimL" placeholder="Длина (см)" class="text-center" oninput="updateCalc()">
                         <input type="number" id="dimW" placeholder="Ширина (см)" class="text-center" oninput="updateCalc()">
@@ -176,42 +301,93 @@
                     </div>
                 </div>
             </div>
-            <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white text-center shadow-lg mt-4">
-                <span class="text-blue-100 text-sm font-medium">Ориентировочная стоимость</span>
-                <div class="text-4xl font-bold mt-2">
-                    <span id="totalPrice">900</span> ₽
+
+            <!-- Price Display -->
+            <div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 text-white text-center shadow-lg mt-4">
+                <span class="text-blue-200 text-sm font-medium">Ориентировочная стоимость</span>
+                <div class="text-4xl font-bold mt-2 tracking-tight">
+                    <span id="totalPrice">0</span> ₽
                 </div>
             </div>
-            <p class="text-[10px] text-center text-[var(--tg-theme-hint-color)] px-4 leading-relaxed">
-                *Расчет является предварительным. Итоговая стоимость фиксируется после взвешивания на складе.
+            
+            <p class="text-[11px] text-center text-[var(--text-secondary)] px-4 leading-relaxed">
+                *Итоговая стоимость фиксируется после взвешивания на складе.
             </p>
         </div>
     </div>
+
+    <!-- TAB 2: ORDER (BUYOUT) -->
     <div id="tab-order" class="tab-content">
-        <h2 class="text-2xl font-bold mb-6 px-1">Выкуп</h2>
+        <h2 class="text-2xl font-bold mb-4 px-1 text-white">Выкуп</h2>
+        
+        <!-- DELIVERY TYPE SELECTOR -->
+        <div class="card p-4 mb-6">
+            <label class="block text-xs font-bold text-[var(--text-secondary)] mb-3 uppercase tracking-wide">Тип доставки</label>
+            <div class="grid grid-cols-1 gap-3">
+                <div class="delivery-option active" onclick="setDeliveryType('grey')" id="del-grey">
+                    <div class="font-bold text-white mb-1">Серая доставка</div>
+                    <div class="text-xs text-[var(--text-secondary)]">20-35 дней • Комиссия 5%</div>
+                </div>
+                <div class="delivery-option" onclick="setDeliveryType('white')" id="del-white">
+                    <div class="font-bold text-white mb-1">Белая доставка</div>
+                    <div class="text-xs text-[var(--text-secondary)]">12-15 дней • Комиссия 10%</div>
+                </div>
+            </div>
+        </div>
+
         <div id="orderItemsList" class="space-y-4"></div>
+        
         <button onclick="addOrderItem()" class="w-full mt-4 py-4 btn-secondary flex items-center justify-center gap-2">
             <i class="fas fa-plus"></i> Добавить товар
         </button>
     </div>
+
+    <!-- TAB 3: SEARCH -->
     <div id="tab-search" class="tab-content">
-        <h2 class="text-2xl font-bold mb-6 px-1">Поиск</h2>
+        <h2 class="text-2xl font-bold mb-6 px-1 text-white">Поиск</h2>
         <div id="searchItemsList" class="space-y-4"></div>
         <button onclick="addSearchItem()" class="w-full mt-4 py-4 btn-secondary flex items-center justify-center gap-2">
             <i class="fas fa-plus"></i> Добавить позицию
         </button>
     </div>
-    <div class="action-bar">
-        <button id="btn-action-calc" onclick="sendCalc()" class="btn-main w-full py-4 text-lg shadow-xl">
-            Рассчитать
-        </button>
-        <button id="btn-action-order" onclick="sendOrder()" class="btn-main w-full py-4 text-lg shadow-xl hidden">
-            Оформить заказ
-        </button>
-        <button id="btn-action-search" onclick="sendSearch()" class="btn-main w-full py-4 text-lg shadow-xl hidden">
-            Найти
-        </button>
+
+    <!-- BOTTOM SHEET FOR BOX SELECTION -->
+    <div class="sheet-overlay" id="boxSheet" onclick="closeBoxSheet(event)">
+        <div class="sheet-content" onclick="event.stopPropagation()">
+            <div class="sheet-handle" onclick="closeBoxSheet()"></div>
+            <h3 class="text-lg font-bold mb-4 px-2 text-white">Выберите размер</h3>
+            
+            <div class="sheet-option" onclick="selectBox('Mini', 679, 'Мелкие аксессуары, чехлы')">
+                <span>Mini <span class="text-sm text-gray-500 block">20x20x20 см</span></span>
+                <span class="text-blue-400 font-medium">679 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('Small', 1562, 'Обувь, косметика')">
+                <span>Small <span class="text-sm text-gray-500 block">30x30x30 см</span></span>
+                <span class="text-blue-400 font-medium">1562 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('Large', 2411, 'Одежда, сумки')">
+                <span>Large <span class="text-sm text-gray-500 block">50x50x50 см</span></span>
+                <span class="text-blue-400 font-medium">2411 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('X-Large', 3489, 'Крупные партии, техника')">
+                <span>X-Large <span class="text-sm text-gray-500 block">60x60x60 см</span></span>
+                <span class="text-blue-400 font-medium">3489 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
+                <span>Свой размер</span>
+                <span class="text-gray-500 text-sm">Калькулятор</span>
+            </div>
+        </div>
     </div>
+
+    <!-- FIXED ACTION BUTTONS -->
+    <div class="action-bar">
+        <button id="btn-action-calc" onclick="sendCalc()" class="btn-main w-full py-4 text-lg shadow-xl">Рассчитать</button>
+        <button id="btn-action-order" onclick="sendOrder()" class="btn-main w-full py-4 text-lg shadow-xl hidden">Оформить заказ</button>
+        <button id="btn-action-search" onclick="sendSearch()" class="btn-main w-full py-4 text-lg shadow-xl hidden">Найти</button>
+    </div>
+
+    <!-- BOTTOM NAVIGATION -->
     <div class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('calc')">
             <i class="fas fa-calculator"></i>
@@ -226,14 +402,85 @@
             <span>Поиск</span>
         </div>
     </div>
+
     <script>
         const IMGBB_API_KEY = '5f8914c62250150915f026194411130d'; 
         const tg = window.Telegram.WebApp;
         tg.expand();
-        const RATE = 13.5; 
+        tg.setHeaderColor('#0f0f0f');
+        tg.setBackgroundColor('#0f0f0f');
+
+        // Базовый курс для расчетов (13) используется в формулах
+        const RATE_MULTIPLIER = 13; 
+        
         let currentTab = 'calc';
         let orderItems = [];
         let searchItems = [];
+        
+        // Тип доставки: 'grey' (5%) или 'white' (10%)
+        let deliveryType = 'grey'; 
+
+        // --- Delivery Type Logic ---
+        function setDeliveryType(type) {
+            deliveryType = type;
+            
+            // Visual Update
+            document.querySelectorAll('.delivery-option').forEach(el => el.classList.remove('active'));
+            document.getElementById(`del-${type}`).classList.add('active');
+            
+            // Recalculate all items
+            orderItems.forEach(item => {
+                updateOrderItem(item.id, 'price', item.price, true);
+            });
+        }
+
+        // --- Custom Box Selector Logic ---
+        let currentBox = { type: '', price: 0, l:0, w:0, h:0 };
+
+        function openBoxSheet() {
+            document.getElementById('boxSheet').classList.add('open');
+        }
+
+        function closeBoxSheet(event) {
+            if (!event || event.target === document.getElementById('boxSheet') || event.target.classList.contains('sheet-handle')) {
+                document.getElementById('boxSheet').classList.remove('open');
+            }
+        }
+
+        function selectBox(type, price, desc) {
+            currentBox.type = type;
+            currentBox.price = price;
+
+            const triggerText = document.getElementById('selectedBoxName');
+            const descEl = document.getElementById('boxDesc');
+            const customDiv = document.getElementById('customDims');
+            
+            document.querySelectorAll('.sheet-option').forEach(el => el.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+
+            if (type === 'custom') {
+                triggerText.innerText = "Свой размер";
+                descEl.classList.remove('hidden');
+                descEl.innerText = desc;
+                customDiv.classList.remove('hidden');
+            } else {
+                triggerText.innerText = type; // Mini, Small...
+                descEl.classList.remove('hidden');
+                descEl.innerText = desc;
+                customDiv.classList.add('hidden');
+                
+                // Примерные размеры для отправки в бот, если пользователь выберет готовый вариант
+                const sizes = {'Mini': [20,20,20], 'Small': [30,30,30], 'Large': [50,50,50], 'X-Large': [60,60,60]};
+                if(sizes[type]) {
+                    [currentBox.l, currentBox.w, currentBox.h] = sizes[type];
+                }
+            }
+
+            updateCalc();
+            document.getElementById('boxSheet').classList.remove('open');
+        }
+
+        // --- Tabs Logic ---
         function switchTab(tab) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -248,67 +495,62 @@
             if(tab === 'order' && orderItems.length === 0) addOrderItem();
             if(tab === 'search' && searchItems.length === 0) addSearchItem();
         }
+
+        // --- Calc Logic ---
         function updateCalc() {
-            const select = document.getElementById('boxType');
-            const customDiv = document.getElementById('customDims');
             const priceEl = document.getElementById('totalPrice');
-            const descEl = document.getElementById('boxDesc');
             let price = 0;
-            if (select.value === 'custom') {
-                customDiv.classList.remove('hidden');
-                descEl.innerText = "Расчет по объемному весу";
+            
+            if (currentBox.type === 'custom') {
                 const l = parseFloat(document.getElementById('dimL').value) || 0;
                 const w = parseFloat(document.getElementById('dimW').value) || 0;
                 const h = parseFloat(document.getElementById('dimH').value) || 0;
                 const weight = parseFloat(document.getElementById('weight').value) || 0;
+                
                 const volWeight = (l * w * h) / 5000;
                 const finalWeight = Math.max(volWeight, weight);
                 price = Math.ceil(Math.max(finalWeight * 450, 500)); 
             } else {
-                customDiv.classList.add('hidden');
-                const opt = select.options[select.selectedIndex];
-                price = parseInt(opt.getAttribute('data-price'));
-                descEl.innerText = opt.getAttribute('data-desc');
+                price = currentBox.price;
             }
             priceEl.innerText = price;
         }
+
         function sendCalc() {
-            const select = document.getElementById('boxType');
+            if (!currentBox.type) return tg.showAlert("Выберите упаковку!");
+            
             let data = { type: 'calc', packPrice: document.getElementById('totalPrice').innerText };
-            if (select.value === 'custom') {
+            if (currentBox.type === 'custom') {
                 data.boxName = 'Свой размер';
                 data.l = document.getElementById('dimL').value;
                 data.w = document.getElementById('dimW').value;
                 data.h = document.getElementById('dimH').value;
                 data.weight = document.getElementById('weight').value;
             } else {
-                const opt = select.options[select.selectedIndex];
-                data.boxName = opt.text;
-                const sizes = {
-                    'XS': '20x20x20', 'S': '30x30x30', 'M': '40x40x40', 'L': '50x50x50', 'XL': '60x60x60'
-                };
-                const dims = sizes[select.value].split('x');
-                data.l = dims[0]; data.w = dims[1]; data.h = dims[2];
+                data.boxName = `Коробка ${currentBox.type}`;
+                data.l = currentBox.l; data.w = currentBox.w; data.h = currentBox.h;
             }
             tg.sendData(JSON.stringify(data));
         }
+
+        // --- Order Logic with Formulas ---
         function addOrderItem() {
             const id = Date.now();
             const html = `
                 <div id="order-item-${id}" class="card p-4 relative animate-fade-in">
-                    <button onclick="removeElement('order-item-${id}', 'order')" class="delete-btn absolute top-3 right-3 text-red-400 p-2">
+                    <button onclick="removeElement('order-item-${id}', 'order')" class="delete-btn absolute top-3 right-3 text-[var(--danger-color)] p-2">
                         <i class="fas fa-times"></i>
                     </button>
-                    <h3 class="font-bold mb-3 text-sm text-[var(--tg-theme-text-color)]">Товар</h3>
-                    <input type="text" class="mb-3 bg-white" placeholder="Ссылка на товар" onchange="updateOrderItem(${id}, 'link', this.value)">
+                    <h3 class="font-bold mb-3 text-sm text-white">Товар</h3>
+                    <input type="text" class="mb-3" placeholder="Ссылка на товар" onchange="updateOrderItem(${id}, 'link', this.value)">
                     <div class="flex gap-3 mb-3">
-                        <input type="number" class="w-1/2 bg-white" placeholder="Цена (¥)" oninput="updateOrderItem(${id}, 'price', this.value)">
-                        <div class="w-1/2 bg-gray-100 rounded-xl flex items-center justify-center text-sm font-bold text-[var(--tg-theme-hint-color)]">
+                        <input type="number" class="w-1/2" placeholder="Цена (¥)" oninput="updateOrderItem(${id}, 'price', this.value)">
+                        <div class="w-1/2 bg-[var(--input-bg)] rounded-xl flex items-center justify-center text-sm font-bold text-[var(--text-secondary)] border border-[var(--border-color)]">
                             <span id="res-rub-${id}">0 ₽</span>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2" id="preview-area-${id}">
-                        <label class="photo-btn text-[var(--tg-theme-hint-color)] hover:text-[var(--tg-theme-button-color)]">
+                        <label class="photo-btn hover:border-blue-500 transition-colors">
                             <i class="fas fa-camera text-xl"></i>
                             <input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(this, ${id}, 'order')">
                         </label>
@@ -319,30 +561,52 @@
             orderItems.push({ id, link: '', price: 0, resYuan: 0, imgUrls: [] });
             updateDeleteButtons('order');
         }
-        function updateOrderItem(id, field, value) {
+
+        function updateOrderItem(id, field, value, forceUpdate = false) {
             const item = orderItems.find(i => i.id === id);
             if (!item) return;
-            if (field === 'price') {
+
+            if (field === 'price' || forceUpdate) {
                 const val = parseFloat(value) || 0;
                 item.price = val;
-                const rub = Math.ceil(val * RATE); 
-                item.resYuan = val;
+                
+                // ФОРМУЛА РАСЧЕТА
+                // Серая: (Price + 30) * 1.05 * 13
+                // Белая: (Price + 30) * 1.10 * 13
+                
+                const commission = deliveryType === 'white' ? 1.10 : 1.05;
+                const rub = Math.ceil( (val + 30) * commission * RATE_MULTIPLIER );
+                
+                item.resYuan = val; 
                 document.getElementById(`res-rub-${id}`).innerText = `${rub} ₽`;
             } else {
                 item[field] = value;
             }
         }
+
+        function sendOrder() {
+            if (orderItems.length === 0) return tg.showAlert("Пустой заказ!");
+            // Send delivery type info as well
+            const data = { 
+                type: 'order', 
+                items: orderItems,
+                deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)'
+            };
+            tg.sendData(JSON.stringify(data));
+        }
+
+        // --- Search Logic ---
         function addSearchItem() {
             const id = Date.now();
             const html = `
                 <div id="search-item-${id}" class="card p-4 relative animate-fade-in">
-                    <button onclick="removeElement('search-item-${id}', 'search')" class="delete-btn absolute top-3 right-3 text-red-400 p-2">
+                    <button onclick="removeElement('search-item-${id}', 'search')" class="delete-btn absolute top-3 right-3 text-[var(--danger-color)] p-2">
                         <i class="fas fa-times"></i>
                     </button>
-                    <h3 class="font-bold mb-3 text-sm text-[var(--tg-theme-text-color)]">Позиция</h3>
-                    <textarea class="bg-white mb-3 h-24 resize-none" placeholder="Комментарий" onchange="updateSearchItem(${id}, 'comment', this.value)"></textarea>
+                    <h3 class="font-bold mb-3 text-sm text-white">Позиция</h3>
+                    <textarea class="mb-3 h-24 resize-none" placeholder="Комментарий" onchange="updateSearchItem(${id}, 'comment', this.value)"></textarea>
                     <div class="flex flex-wrap gap-2" id="search-preview-area-${id}">
-                        <label class="photo-btn text-[var(--tg-theme-hint-color)] hover:text-[var(--tg-theme-button-color)]">
+                        <label class="photo-btn hover:border-blue-500 transition-colors">
                             <i class="fas fa-camera text-xl"></i>
                             <input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(this, ${id}, 'search')">
                         </label>
@@ -353,10 +617,12 @@
             searchItems.push({ id, comment: '', imgUrls: [] });
             updateDeleteButtons('search');
         }
+
         function updateSearchItem(id, field, value) {
             const item = searchItems.find(i => i.id === id);
             if (item) item[field] = value;
         }
+
         function removeElement(elementId, type) {
             const list = type === 'order' ? orderItems : searchItems;
             if (list.length <= 1) return;
@@ -369,6 +635,7 @@
             }
             updateDeleteButtons(type);
         }
+
         function updateDeleteButtons(type) {
             const list = type === 'order' ? orderItems : searchItems;
             const containerId = type === 'order' ? 'orderItemsList' : 'searchItemsList';
@@ -377,12 +644,13 @@
                 btn.style.display = list.length > 1 ? 'block' : 'none';
             });
         }
+
         async function handleImageUpload(input, id, type) {
             const file = input.files[0];
             if (!file) return;
             const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
             const loadId = `load-${Date.now()}`;
-            const loadingHtml = `<div id="${loadId}" class="photo-btn animate-pulse"><i class="fas fa-spinner fa-spin"></i></div>`;
+            const loadingHtml = `<div id="${loadId}" class="photo-btn animate-pulse border-none"><i class="fas fa-spinner fa-spin text-white"></i></div>`;
             input.parentElement.insertAdjacentHTML('beforebegin', loadingHtml);
             const formData = new FormData();
             formData.append("image", file);
@@ -399,27 +667,25 @@
                     const list = type === 'order' ? orderItems : searchItems;
                     const item = list.find(i => i.id === id);
                     if (item) item.imgUrls.push(imgUrl);
-                    const imgHtml = `<div class="w-[70px] h-[70px] rounded-2xl overflow-hidden border border-gray-200 relative"><img src="${thumbUrl}" class="w-full h-full object-cover"></div>`;
+                    const imgHtml = `<div class="w-[70px] h-[70px] rounded-2xl overflow-hidden border border-[var(--border-color)] relative"><img src="${thumbUrl}" class="w-full h-full object-cover"></div>`;
                     input.parentElement.insertAdjacentHTML('beforebegin', imgHtml);
                 } else {
-                    alert("Ошибка загрузки");
+                    tg.showAlert("Ошибка загрузки");
                 }
             } catch (error) {
                 document.getElementById(loadId).remove();
-                alert("Ошибка сети");
+                tg.showAlert("Ошибка сети");
             }
         }
-        function sendOrder() {
-            if (orderItems.length === 0) return tg.showAlert("Пустой заказ!");
-            tg.sendData(JSON.stringify({ type: 'order', items: orderItems }));
-        }
+
         function sendSearch() {
             if (searchItems.length === 0) return tg.showAlert("Пустой поиск!");
             tg.sendData(JSON.stringify({ type: 'search', items: searchItems }));
         }
-        addOrderItem();
-        addSearchItem();
-        document.body.style.backgroundColor = "var(--tg-theme-bg-color)";
+        
+        // Init
+        document.body.style.backgroundColor = "var(--bg-color)";
+        document.getElementById('selectedBoxName').innerText = "Выберите упаковку";
     </script>
 </body>
 </html>
