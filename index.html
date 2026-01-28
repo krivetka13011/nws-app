@@ -22,53 +22,103 @@
             background-color: var(--tg-theme-bg-color);
             color: var(--tg-theme-text-color);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            padding-bottom: 80px; /* Space for bottom nav */
+            /* Отступ снизу для фиксированных кнопок и меню */
+            padding-bottom: 140px; 
+            overflow-x: hidden;
         }
 
-        .btn-primary {
+        /* Мягкие тени и скругления */
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color);
+            border-radius: 20px;
+        }
+
+        .btn-main {
             background-color: var(--tg-theme-button-color);
             color: var(--tg-theme-button-text-color);
+            border-radius: 16px;
+            font-weight: 600;
+            transition: transform 0.1s;
+        }
+        .btn-main:active {
+            transform: scale(0.98);
         }
 
-        .bg-secondary {
-            background-color: var(--tg-theme-secondary-bg-color);
+        .btn-secondary {
+            background-color: transparent;
+            border: 2px dashed var(--tg-theme-button-color);
+            color: var(--tg-theme-button-color);
+            border-radius: 16px;
+            font-weight: 600;
         }
 
+        /* Inputs */
+        input, select, textarea {
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            width: 100%;
+            font-size: 14px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: 2px solid var(--tg-theme-button-color);
+        }
+
+        /* Animations */
         .tab-content {
             display: none;
-            animation: fadeIn 0.3s;
+            animation: fadeIn 0.3s ease-in-out;
         }
-        
         .tab-content.active {
             display: block;
         }
-
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
+            from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
 
-        /* Bottom Navigation */
+        /* Bottom Fixed Areas */
+        .action-bar {
+            position: fixed;
+            bottom: 65px; /* Выше навигации */
+            left: 0;
+            width: 100%;
+            padding: 10px 16px;
+            background: linear-gradient(to top, var(--tg-theme-bg-color) 80%, transparent);
+            z-index: 40;
+        }
+
         .bottom-nav {
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100%;
+            height: 60px;
             background-color: var(--tg-theme-bg-color);
-            border-top: 1px solid var(--tg-theme-hint-color);
+            border-top: 1px solid #e5e5e5;
             display: flex;
             justify-content: space-around;
-            padding: 10px 0;
+            align-items: center;
             z-index: 50;
+            padding-bottom: env(safe-area-inset-bottom);
         }
 
         .nav-item {
             display: flex;
             flex-direction: column;
             align-items: center;
-            font-size: 12px;
+            justify-content: center;
+            font-size: 10px;
             color: var(--tg-theme-hint-color);
-            cursor: pointer;
+            width: 33%;
+            height: 100%;
+            transition: color 0.2s;
         }
 
         .nav-item.active {
@@ -80,30 +130,40 @@
             margin-bottom: 4px;
         }
 
-        /* Inputs */
-        input, select, textarea {
-            background-color: var(--tg-theme-secondary-bg-color);
-            color: var(--tg-theme-text-color);
-            border: 1px solid transparent;
+        /* Custom Select Styling */
+        .select-wrapper {
+            position: relative;
         }
-        
-        input:focus, select:focus, textarea:focus {
-            border-color: var(--tg-theme-button-color);
-            outline: none;
+        .select-wrapper::after {
+            content: '\f078';
+            font-family: 'Font Awesome 5 Free';
+            font-weight: 900;
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--tg-theme-hint-color);
+            pointer-events: none;
+        }
+        select {
+            appearance: none;
+            -webkit-appearance: none;
         }
 
-        .loader {
-            border: 3px solid #f3f3f3;
-            border-radius: 50%;
-            border-top: 3px solid var(--tg-theme-button-color);
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
+        /* Photo Upload Button */
+        .photo-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 16px;
+            background-color: #f0f0f0; /* Slightly darker than input for contrast */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
         }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .photo-btn:active {
+            background-color: #e0e0e0;
         }
     </style>
 </head>
@@ -111,86 +171,112 @@
 
     <!-- TAB 1: CALCULATOR -->
     <div id="tab-calc" class="tab-content active">
-        <h2 class="text-xl font-bold mb-4">📦 Расчет доставки</h2>
+        <h2 class="text-2xl font-bold mb-6 px-1">Калькулятор</h2>
         
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium mb-1 text-[var(--tg-theme-hint-color)]">Выберите коробку</label>
-                <select id="boxType" class="w-full p-3 rounded-lg text-lg" onchange="updateCalc()">
-                    <option value="XS" data-price="500" data-l="20" data-w="20" data-h="20">XS (20x20x20) - 500₽</option>
-                    <option value="S" data-price="800" data-l="30" data-w="30" data-h="30">S (30x30x30) - 800₽</option>
-                    <option value="M" data-price="1200" data-l="40" data-w="40" data-h="40">M (40x40x40) - 1200₽</option>
-                    <option value="L" data-price="1800" data-l="60" data-w="40" data-h="40">L (60x40x40) - 1800₽</option>
-                    <option value="custom">Свой размер</option>
-                </select>
+        <div class="space-y-6">
+            <!-- Box Selection -->
+            <div class="card p-4">
+                <label class="block text-xs font-bold text-[var(--tg-theme-hint-color)] mb-2 uppercase tracking-wide">Выберите упаковку</label>
+                <div class="select-wrapper">
+                    <select id="boxType" class="w-full bg-white text-lg font-medium p-4 rounded-xl shadow-sm" onchange="updateCalc()">
+                        <!-- Цены и размеры обновлены под логику -->
+                        <option value="XS" data-price="900" data-desc="Мелкие аксессуары, чехлы, бижутерия">Коробка XS</option>
+                        <option value="S" data-price="1500" data-desc="Обувь (1 пара), косметика, футболки">Коробка S</option>
+                        <option value="M" data-price="2500" data-desc="Одежда (толстовки, джинсы), сумки">Коробка M</option>
+                        <option value="L" data-price="3800" data-desc="Верхняя одежда, пуховики, техника">Коробка L</option>
+                        <option value="XL" data-price="5000" data-desc="Крупные партии, объемные грузы">Коробка XL</option>
+                        <option value="custom">Свой размер</option>
+                    </select>
+                </div>
+                
+                <!-- Dynamic Description -->
+                <div id="boxDesc" class="mt-3 text-sm text-[var(--tg-theme-hint-color)] bg-white/50 p-2 rounded-lg">
+                    Мелкие аксессуары, чехлы, бижутерия
+                </div>
             </div>
 
-            <div id="customDims" class="grid grid-cols-3 gap-2 hidden">
-                <input type="number" id="dimL" placeholder="Длина" class="p-2 rounded-lg text-center" oninput="updateCalc()">
-                <input type="number" id="dimW" placeholder="Ширина" class="p-2 rounded-lg text-center" oninput="updateCalc()">
-                <input type="number" id="dimH" placeholder="Высота" class="p-2 rounded-lg text-center" oninput="updateCalc()">
-            </div>
-
-            <div class="bg-[var(--tg-theme-secondary-bg-color)] p-4 rounded-xl mt-6">
-                <div class="text-center">
-                    <span class="text-[var(--tg-theme-hint-color)]">Итоговая стоимость</span>
-                    <div class="text-3xl font-bold text-[var(--tg-theme-button-color)] mt-1">
-                        <span id="totalPrice">500</span> ₽
+            <!-- Custom Dimensions Input (Hidden by default) -->
+            <div id="customDims" class="hidden animate-fade-in">
+                <div class="card p-4">
+                    <label class="block text-xs font-bold text-[var(--tg-theme-hint-color)] mb-2 uppercase tracking-wide">Габариты и Вес</label>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <input type="number" id="dimL" placeholder="Длина (см)" class="text-center" oninput="updateCalc()">
+                        <input type="number" id="dimW" placeholder="Ширина (см)" class="text-center" oninput="updateCalc()">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="number" id="dimH" placeholder="Высота (см)" class="text-center" oninput="updateCalc()">
+                        <input type="number" id="weight" placeholder="Вес (кг)" class="text-center" oninput="updateCalc()">
                     </div>
                 </div>
             </div>
-            
-            <p class="text-xs text-center text-[var(--tg-theme-hint-color)] mt-4">
-                *Расчет является предварительным. Точная стоимость будет определена при приеме груза на складе.
-            </p>
 
-            <button onclick="sendCalc()" class="btn-primary w-full py-3 rounded-xl font-bold mt-4 shadow-lg active:scale-95 transition-transform">
-                Рассчитать
-            </button>
+            <!-- Total Price Display -->
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white text-center shadow-lg mt-4">
+                <span class="text-blue-100 text-sm font-medium">Ориентировочная стоимость</span>
+                <div class="text-4xl font-bold mt-2">
+                    <span id="totalPrice">900</span> ₽
+                </div>
+            </div>
+            
+            <p class="text-[10px] text-center text-[var(--tg-theme-hint-color)] px-4 leading-relaxed">
+                *Расчет является предварительным. Итоговая стоимость фиксируется после взвешивания на складе.
+            </p>
         </div>
     </div>
 
-    <!-- TAB 2: BUYOUT (ORDER) -->
+    <!-- TAB 2: ORDER (BUYOUT) -->
     <div id="tab-order" class="tab-content">
-        <h2 class="text-xl font-bold mb-4">🛍️ Выкуп товаров</h2>
-        <div id="orderItemsList" class="space-y-6 mb-20">
-            <!-- Items will be added here -->
-        </div>
+        <h2 class="text-2xl font-bold mb-6 px-1">Выкуп</h2>
         
-        <button onclick="addOrderItem()" class="w-full py-3 border-2 border-dashed border-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-color)] rounded-xl font-bold mb-4 hover:bg-[var(--tg-theme-secondary-bg-color)] transition-colors">
-            + Добавить товар
-        </button>
+        <div id="orderItemsList" class="space-y-4">
+            <!-- Items generated by JS -->
+        </div>
 
-        <button onclick="sendOrder()" class="btn-primary w-full py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-transform">
+        <!-- Add Button (In Flow) -->
+        <button onclick="addOrderItem()" class="w-full mt-4 py-4 btn-secondary flex items-center justify-center gap-2">
+            <i class="fas fa-plus"></i> Добавить товар
+        </button>
+    </div>
+
+    <!-- TAB 3: SEARCH -->
+    <div id="tab-search" class="tab-content">
+        <h2 class="text-2xl font-bold mb-6 px-1">Поиск</h2>
+        
+        <div id="searchItemsList" class="space-y-4">
+            <!-- Items generated by JS -->
+        </div>
+
+        <!-- Add Button (In Flow) -->
+        <button onclick="addSearchItem()" class="w-full mt-4 py-4 btn-secondary flex items-center justify-center gap-2">
+            <i class="fas fa-plus"></i> Добавить позицию
+        </button>
+    </div>
+
+
+    <!-- FIXED ACTION BUTTONS -->
+    <div class="action-bar">
+        <!-- Button for Calculator -->
+        <button id="btn-action-calc" onclick="sendCalc()" class="btn-main w-full py-4 text-lg shadow-xl">
+            Рассчитать
+        </button>
+        
+        <!-- Button for Order -->
+        <button id="btn-action-order" onclick="sendOrder()" class="btn-main w-full py-4 text-lg shadow-xl hidden">
             Оформить заказ
         </button>
-    </div>
 
-    <!-- TAB 3: SEARCH (NEW) -->
-    <div id="tab-search" class="tab-content">
-        <h2 class="text-xl font-bold mb-4">🔍 Поиск товара</h2>
-        <p class="text-sm text-[var(--tg-theme-hint-color)] mb-4">
-            Загрузите фото товара, и мы найдем его для вас.
-        </p>
-
-        <div id="searchItemsList" class="space-y-6 mb-20">
-            <!-- Search Items will be added here -->
-        </div>
-
-        <button onclick="addSearchItem()" class="w-full py-3 border-2 border-dashed border-[var(--tg-theme-button-color)] text-[var(--tg-theme-button-color)] rounded-xl font-bold mb-4 hover:bg-[var(--tg-theme-secondary-bg-color)] transition-colors">
-            + Добавить позицию
-        </button>
-
-        <button onclick="sendSearch()" class="btn-primary w-full py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-transform">
+        <!-- Button for Search -->
+        <button id="btn-action-search" onclick="sendSearch()" class="btn-main w-full py-4 text-lg shadow-xl hidden">
             Найти
         </button>
     </div>
+
 
     <!-- BOTTOM NAVIGATION -->
     <div class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('calc')">
             <i class="fas fa-calculator"></i>
-            <span>Доставка</span>
+            <span>Калькулятор</span>
         </div>
         <div class="nav-item" onclick="switchTab('order')">
             <i class="fas fa-shopping-bag"></i>
@@ -204,26 +290,32 @@
 
     <!-- MAIN SCRIPT -->
     <script>
-        // ================= CONFIGURATION =================
-        // ВАЖНО: Получи ключ на https://api.imgbb.com/ (это бесплатно) и вставь сюда
-        // Без этого загрузка фото работать не будет!
-        const IMGBB_API_KEY = '5f8914c62250150915f026194411130d'; // Пример ключа (лучше заменить на свой)
-        // =================================================
-
+        const IMGBB_API_KEY = '5f8914c62250150915f026194411130d'; 
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // --- STATE ---
+        // Курс юаня для примера
+        const RATE = 13.5; 
+
+        // State
         let currentTab = 'calc';
         let orderItems = [];
         let searchItems = [];
 
         // --- TABS LOGIC ---
         function switchTab(tab) {
+            // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // Reset nav styles
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            
+            // Hide all action buttons
+            document.getElementById('btn-action-calc').classList.add('hidden');
+            document.getElementById('btn-action-order').classList.add('hidden');
+            document.getElementById('btn-action-search').classList.add('hidden');
+
+            // Activate current
             document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById(`btn-action-${tab}`).classList.remove('hidden');
             
             // Highlight nav
             const navIndex = ['calc', 'order', 'search'].indexOf(tab);
@@ -231,9 +323,9 @@
             
             currentTab = tab;
             
-            // Update TG MainButton
-            if (tab === 'calc') tg.MainButton.hide();
-            // else tg.MainButton.show(); // Можно использовать нативную кнопку, но у нас свои в HTML
+            // Re-render items if needed to fix layout glitches
+            if(tab === 'order' && orderItems.length === 0) addOrderItem();
+            if(tab === 'search' && searchItems.length === 0) addSearchItem();
         }
 
         // --- CALCULATOR LOGIC ---
@@ -241,23 +333,30 @@
             const select = document.getElementById('boxType');
             const customDiv = document.getElementById('customDims');
             const priceEl = document.getElementById('totalPrice');
+            const descEl = document.getElementById('boxDesc');
             
             let price = 0;
 
             if (select.value === 'custom') {
                 customDiv.classList.remove('hidden');
+                descEl.innerText = "Расчет по объемному весу";
+                
                 const l = parseFloat(document.getElementById('dimL').value) || 0;
                 const w = parseFloat(document.getElementById('dimW').value) || 0;
                 const h = parseFloat(document.getElementById('dimH').value) || 0;
+                const weight = parseFloat(document.getElementById('weight').value) || 0;
                 
-                // Пример формулы: (Объем / 5000) * ставка или просто за куб
-                // Сделаем простую логику для примера: Объемный вес * 400р
+                // Простая логика: Объемный вес (L*W*H/5000) vs Реальный вес
+                // Ставка например 450р за кг
                 const volWeight = (l * w * h) / 5000;
-                price = Math.ceil(Math.max(volWeight * 400, 500)); // Минимум 500р
+                const finalWeight = Math.max(volWeight, weight);
+                
+                price = Math.ceil(Math.max(finalWeight * 450, 500)); 
             } else {
                 customDiv.classList.add('hidden');
-                const option = select.options[select.selectedIndex];
-                price = parseInt(option.getAttribute('data-price'));
+                const opt = select.options[select.selectedIndex];
+                price = parseInt(opt.getAttribute('data-price'));
+                descEl.innerText = opt.getAttribute('data-desc');
             }
             
             priceEl.innerText = price;
@@ -272,12 +371,16 @@
                 data.l = document.getElementById('dimL').value;
                 data.w = document.getElementById('dimW').value;
                 data.h = document.getElementById('dimH').value;
+                data.weight = document.getElementById('weight').value;
             } else {
                 const opt = select.options[select.selectedIndex];
-                data.boxName = `Коробка ${select.value}`;
-                data.l = opt.getAttribute('data-l');
-                data.w = opt.getAttribute('data-w');
-                data.h = opt.getAttribute('data-h');
+                data.boxName = opt.text; // Text from option
+                // Assuming standard sizes for predefined boxes for the report
+                const sizes = {
+                    'XS': '20x20x20', 'S': '30x30x30', 'M': '40x40x40', 'L': '50x50x50', 'XL': '60x60x60'
+                };
+                const dims = sizes[select.value].split('x');
+                data.l = dims[0]; data.w = dims[1]; data.h = dims[2];
             }
 
             tg.sendData(JSON.stringify(data));
@@ -287,32 +390,35 @@
         function addOrderItem() {
             const id = Date.now();
             const html = `
-                <div id="order-item-${id}" class="bg-[var(--tg-theme-secondary-bg-color)] p-4 rounded-xl relative animate-fade-in">
-                    <button onclick="removeElement('order-item-${id}')" class="absolute top-2 right-2 text-red-500 p-2">
-                        <i class="fas fa-trash"></i>
+                <div id="order-item-${id}" class="card p-4 relative animate-fade-in">
+                    <!-- Delete Button (Logic will hide it if only 1 item) -->
+                    <button onclick="removeElement('order-item-${id}', 'order')" class="delete-btn absolute top-3 right-3 text-red-400 p-2">
+                        <i class="fas fa-times"></i>
                     </button>
-                    <h3 class="font-bold mb-2 text-sm text-[var(--tg-theme-hint-color)]">Товар</h3>
+
+                    <h3 class="font-bold mb-3 text-sm text-[var(--tg-theme-text-color)]">Товар</h3>
                     
-                    <input type="text" class="w-full p-2 rounded mb-2 text-sm" placeholder="Ссылка на товар (1688, Poizon...)" onchange="updateOrderItem(${id}, 'link', this.value)">
+                    <input type="text" class="mb-3 bg-white" placeholder="Ссылка на товар" onchange="updateOrderItem(${id}, 'link', this.value)">
                     
-                    <div class="flex gap-2 mb-2">
-                        <input type="number" class="w-1/2 p-2 rounded text-sm" placeholder="Цена (¥)" onchange="updateOrderItem(${id}, 'price', this.value)">
-                        <input type="text" class="w-1/2 p-2 rounded text-sm bg-gray-200" placeholder="С комиссией" readonly id="res-yuan-${id}">
+                    <div class="flex gap-3 mb-3">
+                        <input type="number" class="w-1/2 bg-white" placeholder="Цена (¥)" oninput="updateOrderItem(${id}, 'price', this.value)">
+                        <div class="w-1/2 bg-gray-100 rounded-xl flex items-center justify-center text-sm font-bold text-[var(--tg-theme-hint-color)]">
+                            <span id="res-rub-${id}">0 ₽</span>
+                        </div>
                     </div>
 
-                    <!-- Image Upload Section -->
-                    <div class="mt-2">
-                        <label class="flex items-center gap-2 px-3 py-2 bg-white rounded cursor-pointer border border-dashed border-gray-300 hover:border-blue-500 transition-colors w-max">
-                            <i class="fas fa-camera text-[var(--tg-theme-button-color)]"></i>
-                            <span class="text-xs" id="upload-text-${id}">Добавить фото</span>
+                    <!-- Square Photo Button -->
+                    <div class="flex flex-wrap gap-2" id="preview-area-${id}">
+                        <label class="photo-btn text-[var(--tg-theme-hint-color)] hover:text-[var(--tg-theme-button-color)]">
+                            <i class="fas fa-camera text-xl"></i>
                             <input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(this, ${id}, 'order')">
                         </label>
-                        <div id="preview-area-${id}" class="flex gap-2 mt-2 flex-wrap"></div>
                     </div>
                 </div>
             `;
             document.getElementById('orderItemsList').insertAdjacentHTML('beforeend', html);
             orderItems.push({ id, link: '', price: 0, resYuan: 0, imgUrls: [] });
+            updateDeleteButtons('order');
         }
 
         function updateOrderItem(id, field, value) {
@@ -320,39 +426,41 @@
             if (!item) return;
 
             if (field === 'price') {
-                item.price = parseFloat(value);
-                // Пример комиссии: +10%
-                item.resYuan = Math.ceil(item.price * 1.1);
-                document.getElementById(`res-yuan-${id}`).value = item.resYuan + ' ¥';
+                const val = parseFloat(value) || 0;
+                item.price = val;
+                // Без комиссии, просто цена в рублях
+                const rub = Math.ceil(val * RATE); 
+                item.resYuan = val; // Store original yuan
+                document.getElementById(`res-rub-${id}`).innerText = `${rub} ₽`;
             } else {
                 item[field] = value;
             }
         }
 
-        // --- SEARCH TAB LOGIC (NEW) ---
+        // --- SEARCH TAB LOGIC ---
         function addSearchItem() {
             const id = Date.now();
             const html = `
-                <div id="search-item-${id}" class="bg-[var(--tg-theme-secondary-bg-color)] p-4 rounded-xl relative">
-                    <button onclick="removeElement('search-item-${id}')" class="absolute top-2 right-2 text-red-500 p-2">
-                        <i class="fas fa-trash"></i>
+                <div id="search-item-${id}" class="card p-4 relative animate-fade-in">
+                    <button onclick="removeElement('search-item-${id}', 'search')" class="delete-btn absolute top-3 right-3 text-red-400 p-2">
+                        <i class="fas fa-times"></i>
                     </button>
-                    <h3 class="font-bold mb-2 text-sm text-[var(--tg-theme-hint-color)]">Позиция поиска</h3>
-                    
-                    <textarea class="w-full p-2 rounded mb-2 text-sm h-20 resize-none" placeholder="Опишите товар (размер, цвет, особенности)..." onchange="updateSearchItem(${id}, 'comment', this.value)"></textarea>
 
-                    <div class="mt-2">
-                        <label class="flex items-center gap-2 px-3 py-2 bg-white rounded cursor-pointer border border-dashed border-gray-300 hover:border-blue-500 transition-colors w-max">
-                            <i class="fas fa-camera text-[var(--tg-theme-button-color)]"></i>
-                            <span class="text-xs" id="search-upload-text-${id}">Загрузить фото</span>
+                    <h3 class="font-bold mb-3 text-sm text-[var(--tg-theme-text-color)]">Позиция</h3>
+                    
+                    <textarea class="bg-white mb-3 h-24 resize-none" placeholder="Комментарий" onchange="updateSearchItem(${id}, 'comment', this.value)"></textarea>
+
+                    <div class="flex flex-wrap gap-2" id="search-preview-area-${id}">
+                        <label class="photo-btn text-[var(--tg-theme-hint-color)] hover:text-[var(--tg-theme-button-color)]">
+                            <i class="fas fa-camera text-xl"></i>
                             <input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(this, ${id}, 'search')">
                         </label>
-                        <div id="search-preview-area-${id}" class="flex gap-2 mt-2 flex-wrap"></div>
                     </div>
                 </div>
             `;
             document.getElementById('searchItemsList').insertAdjacentHTML('beforeend', html);
             searchItems.push({ id, comment: '', imgUrls: [] });
+            updateDeleteButtons('search');
         }
 
         function updateSearchItem(id, field, value) {
@@ -361,35 +469,58 @@
         }
 
         // --- SHARED UTILS ---
-        function removeElement(elementId) {
+        function removeElement(elementId, type) {
+            const list = type === 'order' ? orderItems : searchItems;
+            if (list.length <= 1) return; // Prevent deleting last item
+
             document.getElementById(elementId).remove();
-            // Remove from arrays
+            
+            // Remove from array
             const id = parseInt(elementId.split('-').pop());
-            orderItems = orderItems.filter(i => i.id !== id);
-            searchItems = searchItems.filter(i => i.id !== id);
+            if (type === 'order') {
+                orderItems = orderItems.filter(i => i.id !== id);
+            } else {
+                searchItems = searchItems.filter(i => i.id !== id);
+            }
+            updateDeleteButtons(type);
         }
 
-        // Image Upload Logic (Uploads to ImgBB to get a URL)
+        function updateDeleteButtons(type) {
+            const list = type === 'order' ? orderItems : searchItems;
+            const containerId = type === 'order' ? 'orderItemsList' : 'searchItemsList';
+            const buttons = document.querySelectorAll(`#${containerId} .delete-btn`);
+            
+            // Hide delete button if only 1 item exists
+            buttons.forEach(btn => {
+                btn.style.display = list.length > 1 ? 'block' : 'none';
+            });
+        }
+
         async function handleImageUpload(input, id, type) {
             const file = input.files[0];
             if (!file) return;
 
-            // UI Feedback
-            const textId = type === 'order' ? `upload-text-${id}` : `search-upload-text-${id}`;
-            const labelSpan = document.getElementById(textId);
-            const originalText = labelSpan.innerText;
-            labelSpan.innerText = "Загрузка...";
+            // Find container for preview
+            const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
+            
+            // Create loading placeholder
+            const loadId = `load-${Date.now()}`;
+            const loadingHtml = `<div id="${loadId}" class="photo-btn animate-pulse"><i class="fas fa-spinner fa-spin"></i></div>`;
+            // Insert before the Add button (label)
+            input.parentElement.insertAdjacentHTML('beforebegin', loadingHtml);
 
             const formData = new FormData();
             formData.append("image", file);
 
             try {
-                // Upload to ImgBB
                 const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
                     method: "POST",
                     body: formData
                 });
                 const data = await response.json();
+                
+                // Remove loader
+                document.getElementById(loadId).remove();
 
                 if (data.success) {
                     const imgUrl = data.data.url;
@@ -400,51 +531,38 @@
                     const item = list.find(i => i.id === id);
                     if (item) item.imgUrls.push(imgUrl);
 
-                    // Show Preview
-                    const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
-                    const imgHtml = `<div class="relative w-16 h-16 rounded overflow-hidden border border-gray-300">
+                    // Show Preview (Square rounded)
+                    const imgHtml = `<div class="w-[70px] h-[70px] rounded-2xl overflow-hidden border border-gray-200 relative">
                                         <img src="${thumbUrl}" class="w-full h-full object-cover">
                                      </div>`;
-                    previewArea.insertAdjacentHTML('beforeend', imgHtml);
-                    labelSpan.innerText = "Добавить еще";
+                    // Insert before the Add button
+                    input.parentElement.insertAdjacentHTML('beforebegin', imgHtml);
                 } else {
-                    alert("Ошибка загрузки фото. Попробуйте еще раз.");
-                    labelSpan.innerText = originalText;
+                    alert("Ошибка загрузки");
                 }
             } catch (error) {
-                console.error(error);
-                alert("Ошибка соединения.");
-                labelSpan.innerText = originalText;
+                document.getElementById(loadId).remove();
+                alert("Ошибка сети");
             }
         }
 
-        // --- SENDING DATA ---
+        // --- SENDING ---
         function sendOrder() {
-            if (orderItems.length === 0) return tg.showAlert("Добавьте хотя бы один товар!");
-            const data = {
-                type: 'order',
-                items: orderItems
-            };
-            tg.sendData(JSON.stringify(data));
+            if (orderItems.length === 0) return tg.showAlert("Пустой заказ!");
+            tg.sendData(JSON.stringify({ type: 'order', items: orderItems }));
         }
 
         function sendSearch() {
-            if (searchItems.length === 0) return tg.showAlert("Добавьте хотя бы одну позицию для поиска!");
-            
-            // Check validation
-            const emptyDesc = searchItems.some(i => !i.comment && i.imgUrls.length === 0);
-            if (emptyDesc) return tg.showAlert("Заполните описание или добавьте фото для всех позиций!");
-
-            const data = {
-                type: 'search',
-                items: searchItems
-            };
-            tg.sendData(JSON.stringify(data));
+            if (searchItems.length === 0) return tg.showAlert("Пустой поиск!");
+            tg.sendData(JSON.stringify({ type: 'search', items: searchItems }));
         }
 
         // Init
-        addOrderItem(); // Start with one item
-        addSearchItem(); // Start with one search item
+        // Pre-fill tabs
+        addOrderItem();
+        addSearchItem();
+        // Set styling
+        document.body.style.backgroundColor = "var(--tg-theme-bg-color)";
     </script>
 </body>
 </html>
