@@ -105,9 +105,10 @@
             font-size: 17px;
         }
 
-        /* Опция обрешетки */
+        /* Опция обрешетки - СТИЛЬ ИЗМЕНЕН ПОД ДОСТАВКУ */
         .crate-option {
             background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 18px 20px;
             cursor: pointer;
@@ -115,25 +116,21 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border: 1px solid transparent;
         }
         .crate-option.active {
-            background-color: var(--accent-color);
+            background-color: rgba(59, 130, 246, 0.15);
             border-color: var(--accent-color);
         }
         .crate-option .crate-text {
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: 16px;
-        }
-        .crate-option.active .crate-text,
-        .crate-option.active .crate-price {
             color: white;
+            font-weight: bold;
+            font-size: 18px;
         }
         .crate-option .crate-price {
-            color: var(--accent-color);
-            font-weight: bold;
+            color: var(--text-secondary);
+            font-size: 14px;
         }
+        /* В активном состоянии цвет текста не меняем, меняется только рамка и фон, как в доставке */
 
         /* Radio Group */
         .delivery-option {
@@ -150,16 +147,8 @@
             background-color: rgba(59, 130, 246, 0.15);
             border-color: var(--accent-color);
         }
-        .delivery-option.active::after {
-            content: '\f00c';
-            font-family: 'Font Awesome 6 Free';
-            font-weight: 900;
-            position: absolute;
-            top: 18px;
-            right: 18px;
-            color: var(--accent-color);
-            font-size: 20px;
-        }
+        /* ГАЛОЧКА УБРАНА */
+        /* .delivery-option.active::after { ... } - удалено */
 
         /* Bottom Sheet */
         .sheet-overlay {
@@ -370,7 +359,7 @@
                 
                 <!-- CRATE TOGGLE -->
                 <div class="crate-option" id="crateOption" onclick="toggleCrate()">
-                    <span class="crate-text">🪵 Обрешетка</span>
+                    <span class="crate-text">Обрешетка</span>
                     <span class="crate-price">+299 ₽</span>
                 </div>
 
