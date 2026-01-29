@@ -437,95 +437,81 @@
         let deliveryType = 'grey'; 
         let historyDataCache = [];
 
-        // --- WRAPPERS FOR CLOUD STORAGE (Promise-based) ---
+        // --- WRAPPERS FOR CLOUD STORAGE ---
         const cloudStorage = {
-            getItem: (key) => new Promise((resolve, reject) => {
-                tg.CloudStorage.getItem(key, (err, value) => {
-                    if (err) { console.error('CloudStorage getItem error:', err); resolve(null); }
-                    else resolve(value);
-                });
+            getItem: (key) => new Promise((resolve) => {
+                tg.CloudStorage.getItem(key, (err, value) => resolve(!err ? value : null));
             }),
             setItem: (key, value) => new Promise((resolve, reject) => {
-                tg.CloudStorage.setItem(key, value, (err, stored) => {
-                    if (err) { console.error('CloudStorage setItem error:', err); reject(err); }
-                    else resolve(stored);
-                });
+                tg.CloudStorage.setItem(key, value, (err, stored) => err ? reject(err) : resolve(stored));
             }),
             removeItem: (key) => new Promise((resolve, reject) => {
-                tg.CloudStorage.removeItem(key, (err, deleted) => {
-                    if (err) { console.error('CloudStorage removeItem error:', err); reject(err); }
-                    else resolve(deleted);
-                });
+                tg.CloudStorage.removeItem(key, (err, deleted) => err ? reject(err) : resolve(deleted));
             })
         };
 
-        // --- NEW MULTI-KEY HISTORY LOGIC ---
-
-        // Get list of history IDs
+        // --- HISTORY LOGIC ---
         async function getHistoryIndex() {
             const indexStr = await cloudStorage.getItem('nws_history_idx');
             if (!indexStr) return [];
             try { return JSON.parse(indexStr); } catch (e) { return []; }
         }
 
-        // Save a new order to history
         async function addToHistoryV2(dataObj) {
             try {
-                const id = Date.now().toString(); // Simple ID
+                // OPTIMIZE DATA SIZE FOR STORAGE
+                // Remove imgUrls from individual items if object is large to prevent error
+                // We keep 'images' array which has preview images.
+                // We make a copy to not affect the actual data being sent to bot/displayed now
+                let storageObj = JSON.parse(JSON.stringify(dataObj));
+                
+                // Estimate size
+                if (JSON.stringify(storageObj).length > 3500) {
+                     // Remove detail images from items list in history storage to save space
+                     if(storageObj.itemsData) {
+                         storageObj.itemsData = storageObj.itemsData.map(i => {
+                             const { imgUrls, ...rest } = i; 
+                             return rest; 
+                         });
+                     }
+                }
+
+                const id = Date.now().toString();
                 const key = `nws_ord_${id}`;
                 const index = await getHistoryIndex();
 
-                // Save specific order data to its own key
-                await cloudStorage.setItem(key, JSON.stringify(dataObj));
-
-                // Update index (newest first)
+                await cloudStorage.setItem(key, JSON.stringify(storageObj));
                 index.unshift(key);
                 
-                // Limit history to 20 items to avoid index growing too large, and clean up old keys
                 if (index.length > 20) {
                     const keysToRemove = index.slice(20);
-                    for (const k of keysToRemove) {
-                        await cloudStorage.removeItem(k);
-                    }
-                    index.length = 20; // Trim index
+                    for (const k of keysToRemove) { await cloudStorage.removeItem(k); }
+                    index.length = 20; 
                 }
                 
-                // Save updated index
                 await cloudStorage.setItem('nws_history_idx', JSON.stringify(index));
-            } catch (e) {
-                console.error("Failed to save history:", e);
-                // Don't alert user, silent fail for history is better than breaking flow
-            }
+            } catch (e) { console.error("History save error:", e); }
         }
 
-        // Load all history items for list view
         async function loadFullHistory() {
             const index = await getHistoryIndex();
             if (!index || index.length === 0) return [];
             
-            // Fetch all keys in parallel (Telegram allows getting multiple keys but wrapper above is single)
-            // We can use tg.CloudStorage.getItems if we want, but let's stick to simple loop or Promise.all for now
-            // To be safe with limits, let's fetch sequentially or in small batches if needed, but 20 is fine in parallel usually.
-            // Using standard getItem for each key.
-            const promises = index.map(key => cloudStorage.getItem(key));
-            const results = await Promise.all(promises);
-            
-            const historyItems = results
-                .filter(res => res !== null)
-                .map(res => {
-                    try { return JSON.parse(res); } catch (e) { return null; }
-                })
-                .filter(item => item !== null);
-                
+            // Sequential loading to be safe
+            const historyItems = [];
+            for (const key of index) {
+                const res = await cloudStorage.getItem(key);
+                if (res) {
+                    try { historyItems.push(JSON.parse(res)); } catch (e) {}
+                }
+            }
             return historyItems;
         }
 
-        // --- EXISTING UI LOGIC ---
-
+        // --- UI LOGIC ---
         function openLightbox(src) {
-            const lb = document.getElementById('lightbox');
             document.getElementById('lightboxImg').src = src;
-            lb.classList.add('open');
+            document.getElementById('lightbox').classList.add('open');
         }
         function closeLightbox() {
             document.getElementById('lightbox').classList.remove('open');
@@ -631,17 +617,14 @@
             const triggerText = document.getElementById('selectedBoxName');
             const descEl = document.getElementById('boxDesc');
             const customDiv = document.getElementById('customDims');
-            
             document.querySelectorAll('.sheet-option').forEach(el => el.classList.remove('selected'));
             event.currentTarget.classList.add('selected');
             if (type === 'custom') {
                 triggerText.innerText = "Свой размер";
-                descEl.classList.add('hidden'); // Hide for custom
-                customDiv.classList.remove('hidden');
+                descEl.classList.add('hidden'); customDiv.classList.remove('hidden');
             } else {
                 triggerText.innerText = type;
-                descEl.classList.remove('hidden'); // Show for standard
-                descEl.innerText = desc;
+                descEl.classList.remove('hidden'); descEl.innerText = desc;
                 customDiv.classList.add('hidden');
                 const sizes = {'Mini': [23,17,13], 'Small': [36,26,14], 'Large': [40,29,16], 'X-Large': [37,29,28]};
                 if(sizes[type]) [currentBox.l, currentBox.w, currentBox.h] = sizes[type];
@@ -747,12 +730,6 @@
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
                 
-                // --- SIZE CHECK ---
-                // Telegram sendData limits to 4096 chars.
-                // 11 items with 9 images each will explode this limit.
-                // We will send FULL data to History (Storage) but REDUCED data to Bot.
-                
-                // Calculate Total
                 let totalRub = 0;
                 orderItems.forEach(i => {
                     const val = i.price || 0;
@@ -762,54 +739,29 @@
                     }
                 });
 
-                // 1. SAVE TO HISTORY (Full Data)
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 const historyObj = {
-                    title: 'Заказ на выкуп',
-                    date: new Date().toLocaleString('ru-RU'),
+                    title: 'Заказ на выкуп', date: new Date().toLocaleString('ru-RU'),
                     delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
                     price: totalRub > 0 ? `${formatPrice(totalRub)} ₽` : 'Цена не указана',
-                    itemsData: orderItems, 
-                    images: historyImages
+                    itemsData: orderItems, images: historyImages
                 };
                 
-                // Wait for history to save!
                 await addToHistoryV2(historyObj);
 
-                // 2. SEND TO BOT (Payload Size Safety)
-                // We try to send full data. If it's too big, we remove images from payload 
-                // (Manager still gets visual summary but maybe not all links in bot text if excessively large).
-                // Actually, images are used in worker for sendMediaGroup.
-                // Let's verify size.
-                let payload = { 
-                    type: 'order', 
-                    items: orderItems,
-                    deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)'
-                };
+                // --- DATA REDUCTION FOR BOT ---
+                let payload = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
+                let json = JSON.stringify(payload);
                 
-                let jsonPayload = JSON.stringify(payload);
-                
-                if (jsonPayload.length > 4096) {
-                    alert("Заказ слишком большой для отправки в один клик. Мы сократим данные для бота, но история сохранена.");
-                    // Reduce payload: Keep only 1 image per item for the bot to ensure it fits
-                    const reducedItems = orderItems.map(i => ({
-                        ...i,
-                        imgUrls: i.imgUrls.slice(0, 1) // Keep only 1 image url per item
-                    }));
-                    payload.items = reducedItems;
-                    jsonPayload = JSON.stringify(payload);
-                    
-                    if(jsonPayload.length > 4096) {
-                         // Emergency strip: remove images completely from bot payload
-                         const strippedItems = orderItems.map(i => ({
-                            ...i, imgUrls: []
-                         }));
-                         payload.items = strippedItems;
-                         jsonPayload = JSON.stringify(payload);
-                    }
+                if (json.length > 3500) {
+                    // Aggressive reduction: Remove images from payload if too big
+                    payload.items = payload.items.map(i => {
+                        const { imgUrls, ...rest } = i; 
+                        return { ...rest, imgUrls: [] }; // No images to bot for huge order
+                    });
                 }
-
-                tg.sendData(jsonPayload);
+                
+                tg.sendData(JSON.stringify(payload));
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -902,19 +854,16 @@
                     delivery: 'Поиск', price: '', itemsData: searchItems, images: historyImages
                 };
                 
-                await addToHistoryV2(historyObj); // Wait for save
+                await addToHistoryV2(historyObj);
 
                 let payload = { type: 'search', items: searchItems };
-                let jsonPayload = JSON.stringify(payload);
-
-                if (jsonPayload.length > 4096) {
-                    alert("Слишком много данных. Сокращаем для отправки...");
-                    const reducedItems = searchItems.map(i => ({ ...i, imgUrls: i.imgUrls.slice(0, 1) }));
-                    payload.items = reducedItems;
-                    jsonPayload = JSON.stringify(payload);
+                let json = JSON.stringify(payload);
+                if (json.length > 3500) {
+                    // Strip images for bot if too large
+                    payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
                 }
 
-                tg.sendData(jsonPayload);
+                tg.sendData(JSON.stringify(payload));
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -924,8 +873,8 @@
             
             const history = await loadFullHistory();
             historyDataCache = history; 
-
             container.innerHTML = '';
+            
             if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
             
             history.forEach((item, index) => {
