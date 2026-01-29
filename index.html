@@ -14,11 +14,11 @@
             --text-color: #ffffff;
             --text-secondary: #a1a1aa;
             
-            /* Неоновые акценты */
-            --primary-color: #6366f1; /* Индиго */
-            --accent-glow: 0 0 15px rgba(99, 102, 241, 0.3);
-            --border-color: rgba(99, 102, 241, 0.3);
-            --border-active: #818cf8;
+            /* СИНЯЯ НЕОНОВАЯ ПАЛИТРА */
+            --primary-color: #3b82f6; /* Blue-500 */
+            --accent-glow: 0 0 15px rgba(59, 130, 246, 0.3);
+            --border-color: rgba(59, 130, 246, 0.3);
+            --border-active: #60a5fa; /* Blue-400 */
             
             --danger-color: #ef4444;
         }
@@ -32,7 +32,8 @@
 
         body {
             background-color: var(--bg-color);
-            background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #050505 70%);
+            /* Синий градиент вместо фиолетового */
+            background-image: radial-gradient(circle at 50% 0%, #0f172a 0%, #050505 80%);
             color: var(--text-color);
             font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
@@ -52,9 +53,9 @@
             transition: all 0.3s ease;
         }
 
-        /* --- КНОПКИ --- */
+        /* --- КНОПКИ (Синие) --- */
         .btn-main {
-            background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
             color: #ffffff;
             border-radius: 16px;
             font-weight: 600;
@@ -63,18 +64,18 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
             border: 1px solid rgba(255,255,255,0.1);
         }
         .btn-main:active {
             transform: scale(0.98);
-            box-shadow: 0 2px 10px rgba(79, 70, 229, 0.2);
+            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.2);
         }
 
         .btn-secondary {
-            background-color: rgba(99, 102, 241, 0.1);
+            background-color: rgba(59, 130, 246, 0.1);
             border: 1px solid var(--border-color);
-            color: #818cf8;
+            color: #60a5fa;
             border-radius: 16px;
             font-weight: 600;
             font-size: 16px;
@@ -84,7 +85,7 @@
             justify-content: center;
         }
         .btn-secondary:active {
-            background-color: rgba(99, 102, 241, 0.2);
+            background-color: rgba(59, 130, 246, 0.2);
             border-color: var(--border-active);
         }
 
@@ -94,7 +95,7 @@
             color: var(--text-color);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            /* Стандартный отступ, как у кнопок доставки (20px) */
+            /* Стандартный отступ для консистентности */
             padding: 18px 20px;
             width: 100%;
             font-size: 16px;
@@ -103,6 +104,11 @@
             -webkit-appearance: none;
         }
         
+        /* Исключение для полей калькулятора (где цифры по центру) */
+        input.text-center {
+            padding: 18px 10px;
+        }
+
         input::placeholder, textarea::placeholder {
             color: var(--text-secondary);
             font-weight: 400;
@@ -131,7 +137,7 @@
             color: #fff;
             border-color: var(--border-active);
             box-shadow: var(--accent-glow);
-            text-shadow: 0 0 10px rgba(129, 140, 248, 0.5);
+            text-shadow: 0 0 10px rgba(96, 165, 250, 0.5);
         }
 
         /* --- ВЫБОР (SELECT) --- */
@@ -162,7 +168,7 @@
         }
         
         .option-box.active {
-            background-color: rgba(99, 102, 241, 0.15);
+            background-color: rgba(59, 130, 246, 0.15); /* Синий фон */
             border-color: var(--border-active);
             box-shadow: var(--accent-glow);
         }
@@ -222,7 +228,7 @@
             transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
             max-height: 80vh;
             overflow-y: auto;
-            box-shadow: 0 -5px 30px rgba(99, 102, 241, 0.2);
+            box-shadow: 0 -5px 30px rgba(59, 130, 246, 0.2);
         }
         .sheet-overlay.open .sheet-content {
             bottom: 0;
@@ -252,25 +258,25 @@
             background-color: rgba(255,255,255,0.05);
         }
         .sheet-option.selected {
-            color: #818cf8;
+            color: #60a5fa;
             font-weight: 600;
         }
 
-        /* --- ЗАГОЛОВКИ --- */
+        /* --- ЗАГОЛОВКИ (Синие) --- */
         .section-label {
             display: block;
             font-size: 13px;
             font-weight: 600;
-            color: #818cf8; /* Неоновый цвет заголовков */
+            color: #60a5fa;
             margin-bottom: 12px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             padding-left: 4px;
-            text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
         }
         
         h2 {
-            text-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
         }
 
         /* --- ТАБЫ --- */
@@ -281,19 +287,19 @@
         /* --- ФИКСИРОВАННЫЕ ЭЛЕМЕНТЫ --- */
         .action-bar {
             position: fixed;
-            bottom: 85px; /* Над навигацией */
+            bottom: 85px; 
             left: 0;
             width: 100%;
             padding: 0 16px;
             z-index: 40;
-            pointer-events: none; /* Чтобы клики проходили сквозь пустоту */
+            pointer-events: none; 
         }
         .action-bar button {
             pointer-events: auto;
             box-shadow: 0 8px 30px rgba(0,0,0,0.5);
         }
 
-        /* --- НАВИГАЦИЯ (NEON STYLE) --- */
+        /* --- НАВИГАЦИЯ (Синий неон) --- */
         .bottom-nav {
             position: fixed;
             bottom: 20px;
@@ -335,8 +341,8 @@
             color: #fff;
         }
         .nav-item.active i {
-            color: #818cf8;
-            filter: drop-shadow(0 0 8px rgba(129, 140, 248, 0.6));
+            color: #60a5fa;
+            filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6));
             transform: translateY(-2px);
         }
 
@@ -356,7 +362,7 @@
         }
         .photo-btn:active {
             border-color: var(--border-active);
-            background-color: rgba(99, 102, 241, 0.1);
+            background-color: rgba(59, 130, 246, 0.1);
         }
         .photo-btn i { color: var(--text-secondary); font-size: 24px; }
 
@@ -423,9 +429,10 @@
                 </div>
             </div>
 
-            <div class="card p-6 text-center" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(55, 48, 163, 0.2) 100%); border-color: var(--border-active);">
-                <span class="text-indigo-200 text-sm font-medium uppercase tracking-widest" style="text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);">Ориентировочно</span>
-                <div class="text-5xl font-extrabold mt-3 tracking-tight text-white" style="text-shadow: 0 0 20px rgba(129, 140, 248, 0.6);">
+            <!-- Цена с СИНИМ градиентом -->
+            <div class="card p-6 text-center" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(29, 78, 216, 0.2) 100%); border-color: var(--border-active);">
+                <span class="text-blue-200 text-sm font-medium uppercase tracking-widest" style="text-shadow: 0 0 10px rgba(96, 165, 250, 0.5);">Ориентировочно</span>
+                <div class="text-5xl font-extrabold mt-3 tracking-tight text-white" style="text-shadow: 0 0 20px rgba(96, 165, 250, 0.6);">
                     <span id="totalPrice">0</span> ₽
                 </div>
             </div>
@@ -488,7 +495,7 @@
                     <span class="text-lg font-medium text-white">Mini</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">23x17x13 см, до 0.6 кг</span>
                 </div>
-                <span class="text-indigo-400 font-bold text-lg">679 ₽</span>
+                <span class="text-blue-400 font-bold text-lg">679 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('Small', 1562, 'Пара обуви в коробке')">
@@ -496,7 +503,7 @@
                     <span class="text-lg font-medium text-white">Small</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">36x26x14 см, до 1.5 кг</span>
                 </div>
-                <span class="text-indigo-400 font-bold text-lg">1 562 ₽</span>
+                <span class="text-blue-400 font-bold text-lg">1 562 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('Large', 2411, 'Пара обуви в коробке + несколько вещей')">
@@ -504,7 +511,7 @@
                     <span class="text-lg font-medium text-white">Large</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">40x29x16 см, до 2.5 кг</span>
                 </div>
-                <span class="text-indigo-400 font-bold text-lg">2 411 ₽</span>
+                <span class="text-blue-400 font-bold text-lg">2 411 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('X-Large', 3489, 'Две пары обуви в коробке + несколько вещей')">
@@ -512,7 +519,7 @@
                     <span class="text-lg font-medium text-white">X-Large</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">37x29x28 см, до 3.5 кг</span>
                 </div>
-                <span class="text-indigo-400 font-bold text-lg">3 489 ₽</span>
+                <span class="text-blue-400 font-bold text-lg">3 489 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
