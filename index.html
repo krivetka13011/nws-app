@@ -10,17 +10,14 @@
     <style>
         :root {
             --bg-color: #050505;
-            --card-bg: rgba(20, 25, 35, 0.7); /* Чуть синеватый оттенок */
+            --card-bg: rgba(20, 25, 35, 0.7);
             --text-color: #ffffff;
-            --text-secondary: #94a3b8; /* Slate-400 */
-            
-            /* СИНЯЯ ПАЛИТРА (Blue Neon) */
+            --text-secondary: #94a3b8;
             --primary-color: #3b82f6; 
             --accent-glow: 0 0 15px rgba(59, 130, 246, 0.25);
             --border-color: rgba(59, 130, 246, 0.2);
             --border-active: #3b82f6;
             --active-bg: rgba(59, 130, 246, 0.1);
-            
             --danger-color: #ef4444;
         }
 
@@ -33,7 +30,6 @@
 
         body {
             background-color: var(--bg-color);
-            /* Темно-синий градиент */
             background-image: radial-gradient(circle at 50% 0%, #0f172a 0%, #020617 80%);
             color: var(--text-color);
             font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -54,7 +50,6 @@
             transition: all 0.3s ease;
         }
 
-        /* Синие кнопки */
         .btn-main {
             background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
             color: #ffffff;
@@ -84,19 +79,13 @@
         }
         .btn-secondary:active { background-color: rgba(59, 130, 246, 0.2); }
 
-        .btn-danger-text {
-            color: var(--danger-color);
-            font-size: 14px; font-weight: 500;
-            margin-top: 20px; display: block; text-align: center; width: 100%; padding: 10px; cursor: pointer;
-        }
-
         /* Inputs */
         input, textarea {
             background-color: rgba(0, 0, 0, 0.3);
             color: var(--text-color);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 18px 20px; /* Отступы как у кнопок */
+            padding: 18px 20px;
             width: 100%;
             font-size: 16px;
             font-weight: 500;
@@ -127,7 +116,6 @@
             background-color: var(--active-bg);
         }
 
-        /* Selectors & Options */
         .custom-select-trigger, .option-box, .crate-option {
             background-color: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
@@ -140,7 +128,6 @@
             font-size: 16px; font-weight: 500;
         }
         .option-box { display: block; position: relative; overflow: hidden; }
-        
         .option-box.active, .crate-option.active {
             background-color: var(--active-bg);
             border-color: var(--border-active);
@@ -160,22 +147,15 @@
             text-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
         }
 
-        /* --- LIGHTBOX (Стабильная версия) --- */
+        /* Lightbox */
         .lightbox-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background-color: rgba(0, 0, 0, 0.95);
-            z-index: 9999; /* Поверх всего */
-            display: flex; justify-content: center; align-items: center;
-            opacity: 0; pointer-events: none;
-            transition: opacity 0.2s ease;
+            z-index: 9999; display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
         }
         .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
-        
-        .lightbox-img {
-            max-width: 100%; max-height: 100%;
-            object-fit: contain;
-        }
-        
+        .lightbox-img { max-width: 100%; max-height: 100%; object-fit: contain; }
         .lightbox-close {
             position: absolute; top: 20px; right: 20px;
             width: 44px; height: 44px;
@@ -183,11 +163,10 @@
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             color: white; font-size: 24px; cursor: pointer;
-            backdrop-filter: blur(5px);
-            z-index: 10000;
+            backdrop-filter: blur(5px); z-index: 10000;
         }
 
-        /* History Styles */
+        /* History */
         .history-item {
             background-color: rgba(30, 41, 59, 0.4); border: 1px solid var(--border-color);
             border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer;
@@ -198,7 +177,6 @@
         .history-date { color: var(--text-secondary); font-size: 12px; }
         .history-details { font-size: 14px; color: #fff; line-height: 1.4; }
         .history-price { margin-top: 6px; font-weight: 600; color: #fff; text-align: right; }
-        
         .history-imgs {
             display: flex; gap: 8px; margin-top: 12px;
             overflow-x: auto; padding-bottom: 4px;
@@ -221,8 +199,7 @@
         .sheet-overlay.open { opacity: 1; visibility: visible; }
         .sheet-content {
             position: fixed; bottom: -100%; left: 0; right: 0;
-            background-color: #0f172a; /* Темно-синий фон */
-            border-top: 1px solid var(--border-active);
+            background-color: #0f172a; border-top: 1px solid var(--border-active);
             border-top-left-radius: 24px; border-top-right-radius: 24px;
             z-index: 101; padding: 24px 16px 40px 16px;
             transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
@@ -269,7 +246,6 @@
         }
         .photo-btn:active { border-color: var(--border-active); background-color: var(--active-bg); }
         .photo-btn i { color: var(--text-secondary); font-size: 24px; }
-        
         .preview-item {
             width: 80px; height: 80px; border-radius: 18px; overflow: hidden;
             border: 1px solid var(--border-color); position: relative; flex-shrink: 0;
@@ -460,6 +436,91 @@
         let searchItems = [];
         let deliveryType = 'grey'; 
         let historyDataCache = [];
+
+        // --- WRAPPERS FOR CLOUD STORAGE (Promise-based) ---
+        const cloudStorage = {
+            getItem: (key) => new Promise((resolve, reject) => {
+                tg.CloudStorage.getItem(key, (err, value) => {
+                    if (err) { console.error('CloudStorage getItem error:', err); resolve(null); }
+                    else resolve(value);
+                });
+            }),
+            setItem: (key, value) => new Promise((resolve, reject) => {
+                tg.CloudStorage.setItem(key, value, (err, stored) => {
+                    if (err) { console.error('CloudStorage setItem error:', err); reject(err); }
+                    else resolve(stored);
+                });
+            }),
+            removeItem: (key) => new Promise((resolve, reject) => {
+                tg.CloudStorage.removeItem(key, (err, deleted) => {
+                    if (err) { console.error('CloudStorage removeItem error:', err); reject(err); }
+                    else resolve(deleted);
+                });
+            })
+        };
+
+        // --- NEW MULTI-KEY HISTORY LOGIC ---
+
+        // Get list of history IDs
+        async function getHistoryIndex() {
+            const indexStr = await cloudStorage.getItem('nws_history_idx');
+            if (!indexStr) return [];
+            try { return JSON.parse(indexStr); } catch (e) { return []; }
+        }
+
+        // Save a new order to history
+        async function addToHistoryV2(dataObj) {
+            try {
+                const id = Date.now().toString(); // Simple ID
+                const key = `nws_ord_${id}`;
+                const index = await getHistoryIndex();
+
+                // Save specific order data to its own key
+                await cloudStorage.setItem(key, JSON.stringify(dataObj));
+
+                // Update index (newest first)
+                index.unshift(key);
+                
+                // Limit history to 20 items to avoid index growing too large, and clean up old keys
+                if (index.length > 20) {
+                    const keysToRemove = index.slice(20);
+                    for (const k of keysToRemove) {
+                        await cloudStorage.removeItem(k);
+                    }
+                    index.length = 20; // Trim index
+                }
+                
+                // Save updated index
+                await cloudStorage.setItem('nws_history_idx', JSON.stringify(index));
+            } catch (e) {
+                console.error("Failed to save history:", e);
+                // Don't alert user, silent fail for history is better than breaking flow
+            }
+        }
+
+        // Load all history items for list view
+        async function loadFullHistory() {
+            const index = await getHistoryIndex();
+            if (!index || index.length === 0) return [];
+            
+            // Fetch all keys in parallel (Telegram allows getting multiple keys but wrapper above is single)
+            // We can use tg.CloudStorage.getItems if we want, but let's stick to simple loop or Promise.all for now
+            // To be safe with limits, let's fetch sequentially or in small batches if needed, but 20 is fine in parallel usually.
+            // Using standard getItem for each key.
+            const promises = index.map(key => cloudStorage.getItem(key));
+            const results = await Promise.all(promises);
+            
+            const historyItems = results
+                .filter(res => res !== null)
+                .map(res => {
+                    try { return JSON.parse(res); } catch (e) { return null; }
+                })
+                .filter(item => item !== null);
+                
+            return historyItems;
+        }
+
+        // --- EXISTING UI LOGIC ---
 
         function openLightbox(src) {
             const lb = document.getElementById('lightbox');
@@ -682,23 +743,16 @@
             } else { item[field] = value; }
         }
 
-        async function addToHistory(objectData) {
-            return new Promise((resolve) => {
-                 tg.CloudStorage.getItem('nws_history', (err, value) => {
-                    let history = [];
-                    if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
-                    history.unshift(objectData);
-                    if(history.length > 20) history = history.slice(0, 20); 
-                    tg.CloudStorage.setItem('nws_history', JSON.stringify(history), (err) => {
-                        resolve();
-                    });
-                });
-            });
-        }
-
-        function sendOrder() {
+        async function sendOrder() {
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
+                
+                // --- SIZE CHECK ---
+                // Telegram sendData limits to 4096 chars.
+                // 11 items with 9 images each will explode this limit.
+                // We will send FULL data to History (Storage) but REDUCED data to Bot.
+                
+                // Calculate Total
                 let totalRub = 0;
                 orderItems.forEach(i => {
                     const val = i.price || 0;
@@ -707,17 +761,55 @@
                         totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
                     }
                 });
+
+                // 1. SAVE TO HISTORY (Full Data)
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 const historyObj = {
                     title: 'Заказ на выкуп',
                     date: new Date().toLocaleString('ru-RU'),
                     delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
                     price: totalRub > 0 ? `${formatPrice(totalRub)} ₽` : 'Цена не указана',
-                    itemsData: orderItems, images: historyImages
+                    itemsData: orderItems, 
+                    images: historyImages
                 };
-                addToHistory(historyObj);
-                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
-                tg.sendData(JSON.stringify(data));
+                
+                // Wait for history to save!
+                await addToHistoryV2(historyObj);
+
+                // 2. SEND TO BOT (Payload Size Safety)
+                // We try to send full data. If it's too big, we remove images from payload 
+                // (Manager still gets visual summary but maybe not all links in bot text if excessively large).
+                // Actually, images are used in worker for sendMediaGroup.
+                // Let's verify size.
+                let payload = { 
+                    type: 'order', 
+                    items: orderItems,
+                    deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)'
+                };
+                
+                let jsonPayload = JSON.stringify(payload);
+                
+                if (jsonPayload.length > 4096) {
+                    alert("Заказ слишком большой для отправки в один клик. Мы сократим данные для бота, но история сохранена.");
+                    // Reduce payload: Keep only 1 image per item for the bot to ensure it fits
+                    const reducedItems = orderItems.map(i => ({
+                        ...i,
+                        imgUrls: i.imgUrls.slice(0, 1) // Keep only 1 image url per item
+                    }));
+                    payload.items = reducedItems;
+                    jsonPayload = JSON.stringify(payload);
+                    
+                    if(jsonPayload.length > 4096) {
+                         // Emergency strip: remove images completely from bot payload
+                         const strippedItems = orderItems.map(i => ({
+                            ...i, imgUrls: []
+                         }));
+                         payload.items = strippedItems;
+                         jsonPayload = JSON.stringify(payload);
+                    }
+                }
+
+                tg.sendData(jsonPayload);
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -800,32 +892,58 @@
             btnElement.parentElement.remove();
         }
 
-        function renderHistory() {
+        async function sendSearch() {
+            try {
+                if (searchItems.length === 0) return alert("Пустой поиск!");
+
+                const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                const historyObj = {
+                    title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
+                    delivery: 'Поиск', price: '', itemsData: searchItems, images: historyImages
+                };
+                
+                await addToHistoryV2(historyObj); // Wait for save
+
+                let payload = { type: 'search', items: searchItems };
+                let jsonPayload = JSON.stringify(payload);
+
+                if (jsonPayload.length > 4096) {
+                    alert("Слишком много данных. Сокращаем для отправки...");
+                    const reducedItems = searchItems.map(i => ({ ...i, imgUrls: i.imgUrls.slice(0, 1) }));
+                    payload.items = reducedItems;
+                    jsonPayload = JSON.stringify(payload);
+                }
+
+                tg.sendData(jsonPayload);
+            } catch (e) { alert("Ошибка: " + e.message); }
+        }
+
+        async function renderHistory() {
             const container = document.getElementById('historyList');
             container.innerHTML = '<div style="text-align:center; margin-top:20px; color:#666;">Загрузка...</div>';
-            tg.CloudStorage.getItem('nws_history', (err, value) => {
-                container.innerHTML = '';
-                let history = [];
-                if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
-                historyDataCache = history; 
-                if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
-                history.forEach((item, index) => {
-                    let imagesHtml = '';
-                    if (item.images && item.images.length > 0) {
-                        imagesHtml = `<div class="history-imgs">
-                             ${item.images.map(url => `<img src="${url}" class="history-img-thumb" onclick="openLightbox('${url}'); event.stopPropagation();">`).join('')}
-                           </div>`;
-                    }
-                    const html = `
-                        <div class="history-item" onclick="openHistoryDetails(${index})">
-                            <div class="history-header"><span class="history-type">${item.title}</span><span class="history-date">${item.date}</span></div>
-                            <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
-                            ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
-                            ${imagesHtml}
-                        </div>
-                    `;
-                    container.insertAdjacentHTML('beforeend', html);
-                });
+            
+            const history = await loadFullHistory();
+            historyDataCache = history; 
+
+            container.innerHTML = '';
+            if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
+            
+            history.forEach((item, index) => {
+                let imagesHtml = '';
+                if (item.images && item.images.length > 0) {
+                    imagesHtml = `<div class="history-imgs">
+                            ${item.images.map(url => `<img src="${url}" class="history-img-thumb" onclick="openLightbox('${url}'); event.stopPropagation();">`).join('')}
+                        </div>`;
+                }
+                const html = `
+                    <div class="history-item" onclick="openHistoryDetails(${index})">
+                        <div class="history-header"><span class="history-type">${item.title}</span><span class="history-date">${item.date}</span></div>
+                        <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
+                        ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
+                        ${imagesHtml}
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
             });
         }
         
