@@ -287,16 +287,25 @@
             margin-bottom: 8px; 
             gap: 10px;
         }
-        /* Исправлен текст ссылки: полный показ, перенос строк */
+        
+        /* ИСПРАВЛЕНИЕ ТЕКСТА: Белый цвет, перенос слов */
         .detail-item-link { 
-            color: #60a5fa; 
+            color: #ffffff; /* Белый цвет основного текста */
             font-size: 14px; 
-            text-decoration: underline; 
-            word-break: break-all; /* Разрывать длинные ссылки */
-            white-space: normal; /* Обычный перенос */
+            text-decoration: none; /* Без подчеркивания */
+            word-wrap: break-word; /* Перенос длинных слов */
+            word-break: break-word; 
+            white-space: pre-wrap; /* Сохранение переносов */
             line-height: 1.4;
             flex: 1; /* Занимает доступное место */
         }
+        /* Стиль для самой ссылки (синий и подчеркнутый) */
+        .link-url {
+            color: #60a5fa;
+            text-decoration: underline;
+            word-break: break-all; /* Ссылки можно рвать в любом месте */
+        }
+        
         /* Цена в две строки в детализации */
         .detail-item-price { 
             color: #fff; 
@@ -552,6 +561,13 @@
             document.getElementById('lightbox').classList.remove('open');
         }
 
+        function formatLinks(text) {
+            if(!text) return '';
+            // Regex matches http/https URLs. 
+            // Replaces them with span class="link-url"
+            return text.replace(/(https?:\/\/[^\s]+)/g, '<span class="link-url">$1</span>');
+        }
+
         function openHistoryDetails(index) {
             const item = historyDataCache[index];
             if(!item) return;
@@ -559,7 +575,8 @@
             document.getElementById('detailTitle').innerText = item.title;
             document.getElementById('detailDate').innerText = item.date;
             document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
-            document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0] : '0 ₽';
+            // Simple display of price in header, strip HTML if saved as HTML
+            document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0].trim() : '0 ₽';
 
             const listContainer = document.getElementById('detailItemsList');
             listContainer.innerHTML = '';
@@ -577,10 +594,14 @@
                     // Price on two lines
                     const priceHtml = prod.price ? `<div class="detail-item-price"><div>${formatPrice(rub)} ₽</div><div class="text-[var(--text-secondary)] text-xs font-normal">(${prod.price} ¥)</div></div>` : '';
                     
+                    // Format text to highlight links
+                    const rawText = prod.link || prod.comment || 'Товар';
+                    const formattedText = formatLinks(rawText);
+
                     const html = `
                         <div class="detail-item-card">
                             <div class="detail-item-header">
-                                <div class="detail-item-link">${prod.link || prod.comment || 'Товар'}</div>
+                                <div class="detail-item-link">${formattedText}</div>
                                 ${priceHtml}
                             </div>
                             ${imgsHtml}
@@ -766,7 +787,21 @@
             } else { item[field] = value; }
         }
 
-        async function sendOrder() {
+        async function addToHistory(objectData) {
+            return new Promise((resolve) => {
+                 tg.CloudStorage.getItem('nws_history', (err, value) => {
+                    let history = [];
+                    if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
+                    history.unshift(objectData);
+                    if(history.length > 20) history = history.slice(0, 20); 
+                    tg.CloudStorage.setItem('nws_history', JSON.stringify(history), (err) => {
+                        resolve();
+                    });
+                });
+            });
+        }
+
+        function sendOrder() {
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
                 let totalRub = 0;
@@ -779,11 +814,9 @@
                         totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
                     }
                 });
-
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 // Save price as stacked HTML
                 const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
-
                 const historyObj = {
                     title: 'Заказ на выкуп',
                     date: new Date().toLocaleString('ru-RU'),
@@ -791,16 +824,9 @@
                     price: priceHtml,
                     itemsData: orderItems, images: historyImages
                 };
-                
-                await addToHistoryV2(historyObj);
-
-                let payload = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
-                let json = JSON.stringify(payload);
-                if (json.length > 3500) {
-                    payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
-                }
-                
-                tg.sendData(JSON.stringify(payload));
+                addToHistoryV2(historyObj);
+                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
+                tg.sendData(JSON.stringify(data));
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -922,7 +948,6 @@
                             ${item.images.map(url => `<img src="${url}" class="history-img-thumb" onclick="openLightbox('${url}'); event.stopPropagation();">`).join('')}
                         </div>`;
                 }
-                // Price is already HTML in item.price for buyout orders
                 const html = `
                     <div class="history-item" onclick="openHistoryDetails(${index})">
                         <div class="history-header"><span class="history-type">${item.title}</span><span class="history-date">${item.date}</span></div>
