@@ -13,10 +13,13 @@
             --card-bg: rgba(20, 20, 25, 0.7);
             --text-color: #ffffff;
             --text-secondary: #a1a1aa;
+            
+            /* Неоновые акценты */
             --primary-color: #3b82f6; 
             --accent-glow: 0 0 15px rgba(59, 130, 246, 0.3);
             --border-color: rgba(59, 130, 246, 0.3);
             --border-active: #60a5fa;
+            
             --danger-color: #ef4444;
         }
 
@@ -38,7 +41,7 @@
             padding-bottom: 0; 
         }
 
-        /* --- UI ELEMENTS --- */
+        /* --- СТИЛИЗАЦИЯ КАРТОЧЕК (Neon Glass) --- */
         .card {
             background-color: var(--card-bg);
             backdrop-filter: blur(10px);
@@ -49,6 +52,7 @@
             transition: all 0.3s ease;
         }
 
+        /* --- КНОПКИ --- */
         .btn-main {
             background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
             color: #ffffff;
@@ -62,7 +66,10 @@
             box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
             border: 1px solid rgba(255,255,255,0.1);
         }
-        .btn-main:active { transform: scale(0.98); }
+        .btn-main:active {
+            transform: scale(0.98);
+            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.2);
+        }
 
         .btn-secondary {
             background-color: rgba(59, 130, 246, 0.1);
@@ -81,12 +88,13 @@
             border-color: var(--border-active);
         }
 
-        /* Input Styling */
+        /* --- ПОЛЯ ВВОДА --- */
         input, textarea {
             background-color: rgba(0, 0, 0, 0.3);
             color: var(--text-color);
             border: 1px solid var(--border-color);
             border-radius: 16px;
+            /* Стандартный отступ */
             padding: 18px 20px;
             width: 100%;
             font-size: 16px;
@@ -94,7 +102,15 @@
             transition: all 0.3s ease;
             -webkit-appearance: none;
         }
-        input.text-center { padding: 18px 10px; }
+        
+        input.text-center {
+            padding: 18px 10px;
+        }
+
+        input::placeholder, textarea::placeholder {
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
         input:focus, textarea:focus {
             outline: none;
             border-color: var(--border-active);
@@ -102,6 +118,7 @@
             background-color: rgba(0, 0, 0, 0.5);
         }
 
+        /* Результат цены */
         .price-result-box {
             background-color: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
@@ -121,91 +138,106 @@
             text-shadow: 0 0 10px rgba(96, 165, 250, 0.5);
         }
 
-        .custom-select-trigger, .option-box, .crate-option {
+        /* --- ВЫБОР --- */
+        .custom-select-trigger {
+            background-color: rgba(0, 0, 0, 0.3);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        /* --- ОПЦИИ --- */
+        .option-box, .crate-option {
             background-color: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 18px 20px;
             cursor: pointer;
             transition: all 0.3s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            position: relative;
+            overflow: hidden;
         }
-        .option-box { display: block; position: relative; overflow: hidden; }
+        
         .option-box.active, .crate-option.active {
-            background-color: rgba(59, 130, 246, 0.15);
+            background-color: rgba(99, 102, 241, 0.15);
             border-color: var(--border-active);
             box-shadow: var(--accent-glow);
         }
         
-        .option-title, .crate-text { color: #fff; font-weight: 600; font-size: 16px; margin-bottom: 2px; }
-        .option-sub { color: var(--text-secondary); font-size: 13px; }
-        .option-price, .crate-price { color: var(--border-active); font-weight: bold; }
+        .crate-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .option-title, .crate-text {
+            color: #fff;
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+        .option-sub {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .option-price, .crate-price {
+            color: var(--border-active);
+            font-weight: bold;
+        }
         .crate-text { margin-bottom: 0; }
 
-        .section-label {
-            display: block; font-size: 13px; font-weight: 600;
-            color: #60a5fa; margin-bottom: 12px;
-            text-transform: uppercase; letter-spacing: 0.05em;
-            padding-left: 4px;
-            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
-        }
-
-        /* --- LIGHTBOX (Full Screen Image) --- */
-        .lightbox-overlay {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(0, 0, 0, 0.95);
-            z-index: 200;
-            display: flex; justify-content: center; align-items: center;
-            opacity: 0; pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-        .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
-        .lightbox-img {
-            max-width: 95%; max-height: 85%;
-            border-radius: 8px;
-            box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
-            transform: scale(0.9); transition: transform 0.3s ease;
-        }
-        .lightbox-overlay.open .lightbox-img { transform: scale(1); }
-        .lightbox-close {
-            position: absolute; top: 20px; right: 20px;
-            width: 40px; height: 40px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 24px; cursor: pointer;
-            backdrop-filter: blur(5px);
-        }
-
-        /* --- HISTORY DETAIL SHEET --- */
-        .history-detail-scroll {
-            max-height: 70vh;
-            overflow-y: auto;
-            padding-bottom: 40px;
-        }
-        .detail-row {
-            display: flex; justify-content: space-between;
-            padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .detail-label { color: var(--text-secondary); font-size: 14px; }
-        .detail-value { color: #fff; font-weight: 500; font-size: 14px; text-align: right;}
-        
-        .detail-item-card {
-            background: rgba(255,255,255,0.03);
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 10px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-        .detail-item-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
-        .detail-item-link { color: #60a5fa; font-size: 13px; text-decoration: underline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
-        .detail-item-price { color: #fff; font-weight: bold; font-size: 14px; }
-        .detail-item-imgs { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; }
-        .detail-item-img { 
-            width: 60px; height: 60px; border-radius: 8px; object-fit: cover; 
+        /* --- ИСТОРИЯ --- */
+        .history-item {
+            background-color: rgba(20, 20, 25, 0.5);
             border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .history-type {
+            font-weight: 700;
+            color: #818cf8;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        .history-date {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        .history-details {
+            font-size: 14px;
+            color: #fff;
+            line-height: 1.4;
+        }
+        .history-price {
+            margin-top: 6px;
+            font-weight: 600;
+            color: #fff;
+            text-align: right;
+        }
+        /* Скролл картинок в истории */
+        .history-imgs {
+            display: flex; gap: 8px; margin-top: 12px;
+            overflow-x: auto; padding-bottom: 4px;
+            scrollbar-width: none; /* Hide scrollbar */
+        }
+        .history-imgs::-webkit-scrollbar { display: none; }
+        
+        .history-img-thumb {
+            width: 50px; height: 50px; border-radius: 10px; object-fit: cover;
+            border: 1px solid var(--border-color); flex-shrink: 0;
         }
 
         /* --- SHEETS & NAV --- */
@@ -216,6 +248,7 @@
             backdrop-filter: blur(8px);
         }
         .sheet-overlay.open { opacity: 1; visibility: visible; }
+
         .sheet-content {
             position: fixed; bottom: -100%; left: 0; right: 0;
             background-color: #121217;
@@ -232,12 +265,26 @@
             padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
             color: var(--text-color); display: flex; justify-content: space-between; align-items: center; font-size: 17px;
         }
-        .sheet-option.selected { color: #60a5fa; font-weight: 600; }
+        .sheet-option:last-child { border-bottom: none; }
+        .sheet-option:active { background-color: rgba(255,255,255,0.05); }
+        .sheet-option.selected { color: #818cf8; font-weight: 600; }
 
+        /* --- ЗАГОЛОВКИ --- */
+        .section-label {
+            display: block; font-size: 13px; font-weight: 600;
+            color: #818cf8; margin-bottom: 12px;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding-left: 4px;
+            text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+        }
+        h2 { text-shadow: 0 0 20px rgba(99, 102, 241, 0.4); }
+
+        /* --- ТАБЫ --- */
         .tab-content { display: none; animation: fadeIn 0.4s ease-out; }
         .tab-content.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* --- ФИКСИРОВАННЫЕ ЭЛЕМЕНТЫ --- */
         .action-bar { position: fixed; bottom: 85px; left: 0; width: 100%; padding: 0 16px; z-index: 40; pointer-events: none; }
         .action-bar button { pointer-events: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
 
@@ -274,18 +321,17 @@
             display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;
         }
 
-        /* History specific */
-        .history-item {
-            background-color: rgba(20, 20, 25, 0.5); border: 1px solid var(--border-color);
-            border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer; /* Clickable */
-            transition: background 0.2s;
-        }
-        .history-item:active { background-color: rgba(99, 102, 241, 0.1); }
-        .history-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
-        .history-type { font-weight: 700; color: #60a5fa; font-size: 14px; text-transform: uppercase; }
-        .history-date { color: var(--text-secondary); font-size: 12px; }
-        .history-details { font-size: 14px; color: #fff; line-height: 1.4; }
-        .history-price { margin-top: 6px; font-weight: 600; color: #fff; text-align: right; }
+        /* Detail Sheet Styles */
+        .history-detail-scroll { max-height: 70vh; overflow-y: auto; padding-bottom: 40px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .detail-label { color: var(--text-secondary); font-size: 14px; }
+        .detail-value { color: #fff; font-weight: 500; font-size: 14px; text-align: right;}
+        .detail-item-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .detail-item-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .detail-item-link { color: #60a5fa; font-size: 13px; text-decoration: underline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+        .detail-item-price { color: #fff; font-weight: bold; font-size: 14px; }
+        .detail-item-imgs { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; }
+        .detail-item-img { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border-color); }
         
         .scroll-spacer { height: 200px; width: 100%; flex-shrink: 0; }
     </style>
@@ -308,6 +354,10 @@
                     <span id="selectedBoxName" class="font-medium">Выберите упаковку</span>
                     <i class="fas fa-chevron-down text-gray-400"></i>
                 </div>
+                
+                <!-- NEW: BOX DESCRIPTION INFO (Between select and crate) -->
+                <div id="boxDesc" class="mt-2 mb-4 text-[14px] leading-relaxed text-[var(--text-secondary)] bg-[rgba(0,0,0,0.3)] p-4 rounded-2xl hidden border border-[var(--border-color)]"></div>
+                
                 <div class="option-box crate-row" id="crateOption" onclick="toggleCrate()">
                     <span class="option-title">Обрешетка</span>
                     <span class="option-price">+299 ₽</span>
@@ -407,7 +457,7 @@
         </div>
     </div>
 
-    <!-- HISTORY DETAIL SHEET (NEW) -->
+    <!-- HISTORY DETAIL SHEET -->
     <div class="sheet-overlay" id="historyDetailSheet" onclick="closeHistoryDetails(event)">
         <div class="sheet-content" onclick="event.stopPropagation()">
             <div class="sheet-handle" onclick="closeHistoryDetails()"></div>
@@ -454,9 +504,8 @@
         let orderItems = [];
         let searchItems = [];
         let deliveryType = 'grey'; 
-        let historyDataCache = []; // To store full objects for detail view
+        let historyDataCache = [];
 
-        // --- LIGHTBOX LOGIC ---
         function openLightbox(src) {
             document.getElementById('lightboxImg').src = src;
             document.getElementById('lightbox').classList.add('open');
@@ -465,7 +514,6 @@
             document.getElementById('lightbox').classList.remove('open');
         }
 
-        // --- HISTORY DETAIL LOGIC ---
         function openHistoryDetails(index) {
             const item = historyDataCache[index];
             if(!item) return;
@@ -486,9 +534,7 @@
                             ${prod.imgUrls.map(url => `<img src="${url}" class="detail-item-img" onclick="openLightbox('${url}')">`).join('')}
                         </div>`;
                     }
-                    
                     const priceHtml = prod.price ? `<div class="detail-item-price">${formatPrice(Math.ceil((parseFloat(prod.price)+30)*((item.delivery && item.delivery.includes('Белая') ? 1.1 : 1.05)) * 13))} ₽ (${prod.price} ¥)</div>` : '';
-
                     const html = `
                         <div class="detail-item-card">
                             <div class="detail-item-header">
@@ -567,14 +613,20 @@
         function selectBox(type, price, desc) {
             currentBox.type = type; currentBox.price = price;
             const triggerText = document.getElementById('selectedBoxName');
+            const descEl = document.getElementById('boxDesc');
             const customDiv = document.getElementById('customDims');
+            
             document.querySelectorAll('.sheet-option').forEach(el => el.classList.remove('selected'));
             event.currentTarget.classList.add('selected');
+
             if (type === 'custom') {
                 triggerText.innerText = "Свой размер";
+                descEl.classList.add('hidden'); // Hide for custom
                 customDiv.classList.remove('hidden');
             } else {
                 triggerText.innerText = type;
+                descEl.classList.remove('hidden'); // Show for standard
+                descEl.innerText = desc;
                 customDiv.classList.add('hidden');
                 const sizes = {'Mini': [23,17,13], 'Small': [36,26,14], 'Large': [40,29,16], 'X-Large': [37,29,28]};
                 if(sizes[type]) [currentBox.l, currentBox.w, currentBox.h] = sizes[type];
@@ -676,6 +728,45 @@
             } else { item[field] = value; }
         }
 
+        async function addToHistory(objectData) {
+            return new Promise((resolve) => {
+                 tg.CloudStorage.getItem('nws_history', (err, value) => {
+                    let history = [];
+                    if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
+                    history.unshift(objectData);
+                    if(history.length > 20) history = history.slice(0, 20); 
+                    tg.CloudStorage.setItem('nws_history', JSON.stringify(history), (err) => {
+                        resolve();
+                    });
+                });
+            });
+        }
+
+        function sendOrder() {
+            try {
+                if (orderItems.length === 0) return alert("Пустой заказ!");
+                let totalRub = 0;
+                orderItems.forEach(i => {
+                    const val = i.price || 0;
+                    if(val > 0) {
+                        const comm = deliveryType === 'white' ? 0.10 : 0.05;
+                        totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
+                    }
+                });
+                const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                const historyObj = {
+                    title: 'Заказ на выкуп',
+                    date: new Date().toLocaleString('ru-RU'),
+                    delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
+                    price: totalRub > 0 ? `${formatPrice(totalRub)} ₽` : 'Цена не указана',
+                    itemsData: orderItems, images: historyImages
+                };
+                addToHistory(historyObj);
+                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
+                tg.sendData(JSON.stringify(data));
+            } catch (e) { alert("Ошибка: " + e.message); }
+        }
+
         function addSearchItem() {
             const id = Date.now();
             const html = `
@@ -755,69 +846,15 @@
             btnElement.parentElement.remove();
         }
 
-        // --- HISTORY SAVING & RENDERING ---
-
-        async function addToHistory(objectData) {
-            return new Promise((resolve) => {
-                 tg.CloudStorage.getItem('nws_history', (err, value) => {
-                    let history = [];
-                    if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
-                    
-                    history.unshift(objectData);
-                    if(history.length > 20) history = history.slice(0, 20); 
-                    
-                    tg.CloudStorage.setItem('nws_history', JSON.stringify(history), (err) => {
-                        resolve();
-                    });
-                });
-            });
-        }
-
-        function sendOrder() {
-            try {
-                if (orderItems.length === 0) return alert("Пустой заказ!");
-                let totalRub = 0;
-                orderItems.forEach(i => {
-                    const val = i.price || 0;
-                    if(val > 0) {
-                        const comm = deliveryType === 'white' ? 0.10 : 0.05;
-                        totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
-                    }
-                });
-
-                // Prepare history object
-                const historyObj = {
-                    title: 'Заказ на выкуп',
-                    date: new Date().toLocaleString('ru-RU'),
-                    delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
-                    price: totalRub > 0 ? `${formatPrice(totalRub)} ₽` : 'Цена не указана',
-                    itemsData: orderItems // Save full items array
-                };
-
-                addToHistory(historyObj);
-
-                const data = { 
-                    type: 'order', 
-                    items: orderItems,
-                    deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)'
-                };
-                tg.sendData(JSON.stringify(data));
-            } catch (e) { alert("Ошибка: " + e.message); }
-        }
-
         function sendSearch() {
             try {
                 if (searchItems.length === 0) return alert("Пустой поиск!");
-
+                const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 const historyObj = {
-                    title: 'Заявка на поиск',
-                    date: new Date().toLocaleString('ru-RU'),
-                    delivery: 'Поиск',
-                    price: '',
-                    itemsData: searchItems
+                    title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
+                    delivery: 'Поиск', price: '', itemsData: searchItems, images: historyImages
                 };
                 addToHistory(historyObj);
-
                 tg.sendData(JSON.stringify({ type: 'search', items: searchItems }));
             } catch (e) { alert("Ошибка: " + e.message); }
         }
@@ -825,28 +862,25 @@
         function renderHistory() {
             const container = document.getElementById('historyList');
             container.innerHTML = '<div style="text-align:center; margin-top:20px; color:#666;">Загрузка...</div>';
-            
             tg.CloudStorage.getItem('nws_history', (err, value) => {
                 container.innerHTML = '';
                 let history = [];
                 if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
-                
-                historyDataCache = history; // Cache for detail view
-
-                if (history.length === 0) {
-                    container.innerHTML = '<div class="empty-history">История заказов пуста</div>';
-                    return;
-                }
-
+                historyDataCache = history; 
+                if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
                 history.forEach((item, index) => {
+                    let imagesHtml = '';
+                    if (item.images && item.images.length > 0) {
+                        imagesHtml = `<div class="history-imgs">
+                             ${item.images.map(url => `<img src="${url}" class="history-img-thumb" onclick="openLightbox('${url}'); event.stopPropagation();">`).join('')}
+                           </div>`;
+                    }
                     const html = `
                         <div class="history-item" onclick="openHistoryDetails(${index})">
-                            <div class="history-header">
-                                <span class="history-type">${item.title}</span>
-                                <span class="history-date">${item.date}</span>
-                            </div>
+                            <div class="history-header"><span class="history-type">${item.title}</span><span class="history-date">${item.date}</span></div>
                             <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
                             ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
+                            ${imagesHtml}
                         </div>
                     `;
                     container.insertAdjacentHTML('beforeend', html);
@@ -854,7 +888,6 @@
             });
         }
         
-        // Init
         document.body.style.backgroundColor = "var(--bg-color)";
         document.getElementById('selectedBoxName').innerText = "Выберите упаковку";
     </script>
