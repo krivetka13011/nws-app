@@ -13,11 +13,14 @@
             --card-bg: rgba(20, 25, 35, 0.7);
             --text-color: #ffffff;
             --text-secondary: #94a3b8;
+            
+            /* СИНЯЯ ПАЛИТРА */
             --primary-color: #3b82f6; 
             --accent-glow: 0 0 15px rgba(59, 130, 246, 0.25);
             --border-color: rgba(59, 130, 246, 0.2);
             --border-active: #3b82f6;
             --active-bg: rgba(59, 130, 246, 0.1);
+            
             --danger-color: #ef4444;
         }
 
@@ -136,7 +139,7 @@
         
         .option-title, .crate-text { color: #fff; font-weight: 600; font-size: 16px; margin-bottom: 2px; }
         .option-sub { color: var(--text-secondary); font-size: 13px; }
-        .option-price, .crate-price { color: #60a5fa; font-weight: bold; }
+        .option-price, .crate-price { color: var(--border-active); font-weight: bold; }
         .crate-text { margin-bottom: 0; }
 
         .section-label {
@@ -176,7 +179,19 @@
         .history-type { font-weight: 700; color: #60a5fa; font-size: 14px; text-transform: uppercase; }
         .history-date { color: var(--text-secondary); font-size: 12px; }
         .history-details { font-size: 14px; color: #fff; line-height: 1.4; }
-        .history-price { margin-top: 6px; font-weight: 600; color: #fff; text-align: right; }
+        
+        /* ЦЕНА В ИСТОРИИ (2 строки) */
+        .history-price { 
+            margin-top: 6px; 
+            text-align: right; 
+            font-weight: 600; 
+            color: #fff; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: flex-end; 
+            gap: 2px;
+        }
+
         .history-imgs {
             display: flex; gap: 8px; margin-top: 12px;
             overflow-x: auto; padding-bottom: 4px;
@@ -257,15 +272,40 @@
             display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;
         }
 
-        /* Detail Sheet */
+        /* Detail Sheet Styles */
         .history-detail-scroll { max-height: 70vh; overflow-y: auto; padding-bottom: 40px; }
         .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .detail-label { color: var(--text-secondary); font-size: 14px; }
         .detail-value { color: #fff; font-weight: 500; font-size: 14px; text-align: right;}
         .detail-item-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); }
-        .detail-item-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
-        .detail-item-link { color: #60a5fa; font-size: 13px; text-decoration: underline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
-        .detail-item-price { color: #fff; font-weight: bold; font-size: 14px; }
+        
+        /* Исправлен хэдер детализации для переноса текста и выравнивания цены */
+        .detail-item-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; /* Цена и текст начинаются сверху */
+            margin-bottom: 8px; 
+            gap: 10px;
+        }
+        /* Исправлен текст ссылки: полный показ, перенос строк */
+        .detail-item-link { 
+            color: #60a5fa; 
+            font-size: 14px; 
+            text-decoration: underline; 
+            word-break: break-all; /* Разрывать длинные ссылки */
+            white-space: normal; /* Обычный перенос */
+            line-height: 1.4;
+            flex: 1; /* Занимает доступное место */
+        }
+        /* Цена в две строки в детализации */
+        .detail-item-price { 
+            color: #fff; 
+            font-weight: bold; 
+            font-size: 14px; 
+            text-align: right;
+            flex-shrink: 0; /* Не сжимать блок цены */
+        }
+        
         .detail-item-imgs { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; }
         .detail-item-img { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border-color); }
         
@@ -459,15 +499,10 @@
 
         async function addToHistoryV2(dataObj) {
             try {
-                // OPTIMIZE DATA SIZE FOR STORAGE
-                // Remove imgUrls from individual items if object is large to prevent error
-                // We keep 'images' array which has preview images.
-                // We make a copy to not affect the actual data being sent to bot/displayed now
                 let storageObj = JSON.parse(JSON.stringify(dataObj));
                 
-                // Estimate size
+                // Optimize if needed, but keeping text is priority now
                 if (JSON.stringify(storageObj).length > 3500) {
-                     // Remove detail images from items list in history storage to save space
                      if(storageObj.itemsData) {
                          storageObj.itemsData = storageObj.itemsData.map(i => {
                              const { imgUrls, ...rest } = i; 
@@ -497,7 +532,6 @@
             const index = await getHistoryIndex();
             if (!index || index.length === 0) return [];
             
-            // Sequential loading to be safe
             const historyItems = [];
             for (const key of index) {
                 const res = await cloudStorage.getItem(key);
@@ -510,8 +544,9 @@
 
         // --- UI LOGIC ---
         function openLightbox(src) {
+            const lb = document.getElementById('lightbox');
             document.getElementById('lightboxImg').src = src;
-            document.getElementById('lightbox').classList.add('open');
+            lb.classList.add('open');
         }
         function closeLightbox() {
             document.getElementById('lightbox').classList.remove('open');
@@ -524,7 +559,7 @@
             document.getElementById('detailTitle').innerText = item.title;
             document.getElementById('detailDate').innerText = item.date;
             document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
-            document.getElementById('detailTotal').innerText = item.price || '0 ₽';
+            document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0] : '0 ₽';
 
             const listContainer = document.getElementById('detailItemsList');
             listContainer.innerHTML = '';
@@ -537,7 +572,11 @@
                             ${prod.imgUrls.map(url => `<img src="${url}" class="detail-item-img" onclick="openLightbox('${url}')">`).join('')}
                         </div>`;
                     }
-                    const priceHtml = prod.price ? `<div class="detail-item-price">${formatPrice(Math.ceil((parseFloat(prod.price)+30)*((item.delivery && item.delivery.includes('Белая') ? 1.1 : 1.05)) * 13))} ₽ (${prod.price} ¥)</div>` : '';
+                    
+                    const rub = Math.ceil((parseFloat(prod.price)+30)*((item.delivery && item.delivery.includes('Белая') ? 1.1 : 1.05)) * 13);
+                    // Price on two lines
+                    const priceHtml = prod.price ? `<div class="detail-item-price"><div>${formatPrice(rub)} ₽</div><div class="text-[var(--text-secondary)] text-xs font-normal">(${prod.price} ¥)</div></div>` : '';
+                    
                     const html = `
                         <div class="detail-item-card">
                             <div class="detail-item-header">
@@ -621,7 +660,8 @@
             event.currentTarget.classList.add('selected');
             if (type === 'custom') {
                 triggerText.innerText = "Свой размер";
-                descEl.classList.add('hidden'); customDiv.classList.remove('hidden');
+                descEl.classList.add('hidden'); // Hide for custom
+                customDiv.classList.remove('hidden');
             } else {
                 triggerText.innerText = type;
                 descEl.classList.remove('hidden'); descEl.innerText = desc;
@@ -729,36 +769,35 @@
         async function sendOrder() {
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
-                
                 let totalRub = 0;
+                let totalYuan = 0;
                 orderItems.forEach(i => {
                     const val = i.price || 0;
                     if(val > 0) {
+                        totalYuan += val;
                         const comm = deliveryType === 'white' ? 0.10 : 0.05;
                         totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
                     }
                 });
 
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                // Save price as stacked HTML
+                const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
+
                 const historyObj = {
-                    title: 'Заказ на выкуп', date: new Date().toLocaleString('ru-RU'),
+                    title: 'Заказ на выкуп',
+                    date: new Date().toLocaleString('ru-RU'),
                     delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
-                    price: totalRub > 0 ? `${formatPrice(totalRub)} ₽` : 'Цена не указана',
+                    price: priceHtml,
                     itemsData: orderItems, images: historyImages
                 };
                 
                 await addToHistoryV2(historyObj);
 
-                // --- DATA REDUCTION FOR BOT ---
                 let payload = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
                 let json = JSON.stringify(payload);
-                
                 if (json.length > 3500) {
-                    // Aggressive reduction: Remove images from payload if too big
-                    payload.items = payload.items.map(i => {
-                        const { imgUrls, ...rest } = i; 
-                        return { ...rest, imgUrls: [] }; // No images to bot for huge order
-                    });
+                    payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
                 }
                 
                 tg.sendData(JSON.stringify(payload));
@@ -859,7 +898,6 @@
                 let payload = { type: 'search', items: searchItems };
                 let json = JSON.stringify(payload);
                 if (json.length > 3500) {
-                    // Strip images for bot if too large
                     payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
                 }
 
@@ -884,6 +922,7 @@
                             ${item.images.map(url => `<img src="${url}" class="history-img-thumb" onclick="openLightbox('${url}'); event.stopPropagation();">`).join('')}
                         </div>`;
                 }
+                // Price is already HTML in item.price for buyout orders
                 const html = `
                     <div class="history-item" onclick="openHistoryDetails(${index})">
                         <div class="history-header"><span class="history-type">${item.title}</span><span class="history-date">${item.date}</span></div>
