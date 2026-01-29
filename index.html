@@ -9,20 +9,21 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0f0f0f;
-            --card-bg: #1c1c1e;
+            --bg-color: #050505;
+            --card-bg: rgba(20, 20, 25, 0.7);
             --text-color: #ffffff;
-            --text-secondary: #98989e;
-            --accent-color: #3b82f6;
+            --text-secondary: #a1a1aa;
+            
+            /* Неоновые акценты */
+            --primary-color: #6366f1; /* Индиго */
+            --accent-glow: 0 0 15px rgba(99, 102, 241, 0.3);
+            --border-color: rgba(99, 102, 241, 0.3);
+            --border-active: #818cf8;
+            
             --danger-color: #ef4444;
-            --input-bg: #2c2c2e;
-            --border-color: #3a3a3c;
         }
 
-        /* Глобальный сброс для корректных отступов */
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         html, body {
             height: 100%;
@@ -31,143 +32,176 @@
 
         body {
             background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #050505 70%);
             color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             overflow-x: hidden;
             -webkit-tap-highlight-color: transparent;
-            /* Отступ снизу не нужен, используем spacer */
             padding-bottom: 0; 
         }
 
-        /* Карточки */
+        /* --- СТИЛИЗАЦИЯ КАРТОЧЕК (Neon Glass) --- */
         .card {
             background-color: var(--card-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
             border-radius: 20px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
         }
 
-        /* Кнопки */
+        /* --- КНОПКИ --- */
         .btn-main {
-            background-color: var(--accent-color);
+            background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
             color: #ffffff;
-            border-radius: 18px;
+            border-radius: 16px;
             font-weight: 600;
-            font-size: 18px;
-            transition: transform 0.1s, opacity 0.2s;
+            font-size: 17px;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+            border: 1px solid rgba(255,255,255,0.1);
         }
         .btn-main:active {
             transform: scale(0.98);
-            opacity: 0.9;
+            box-shadow: 0 2px 10px rgba(79, 70, 229, 0.2);
         }
 
         .btn-secondary {
-            background-color: rgba(59, 130, 246, 0.1);
-            border: 1px dashed var(--accent-color);
-            color: var(--accent-color);
-            border-radius: 18px;
+            background-color: rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--border-color);
+            color: #818cf8;
+            border-radius: 16px;
             font-weight: 600;
             font-size: 16px;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         .btn-secondary:active {
-            background-color: rgba(59, 130, 246, 0.2);
+            background-color: rgba(99, 102, 241, 0.2);
+            border-color: var(--border-active);
         }
 
-        /* Поля ввода - ОТСТУП ИСПРАВЛЕН */
+        /* --- ПОЛЯ ВВОДА --- */
         input, textarea {
-            background-color: var(--input-bg);
+            background-color: rgba(0, 0, 0, 0.3);
             color: var(--text-color);
-            border: 1px solid transparent;
+            border: 1px solid var(--border-color);
             border-radius: 16px;
-            /* Увеличенный отступ слева (30px) для комфортного вида */
-            padding: 16px 16px 16px 30px;
+            /* ИСПРАВЛЕНО: Стандартный отступ, как у кнопок доставки (20px) */
+            padding: 18px 20px;
             width: 100%;
-            font-size: 17px;
-            transition: border-color 0.2s;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
         }
+        
         input::placeholder, textarea::placeholder {
             color: var(--text-secondary);
+            font-weight: 400;
         }
         input:focus, textarea:focus {
             outline: none;
-            border-color: var(--accent-color);
+            border-color: var(--border-active);
+            box-shadow: var(--accent-glow);
+            background-color: rgba(0, 0, 0, 0.5);
         }
 
-        /* Custom Selector */
-        .custom-select-trigger {
-            background-color: var(--input-bg);
-            color: var(--text-color);
-            border-radius: 16px;
-            padding: 18px 30px; /* Согласовано с input */
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            font-size: 17px;
-        }
-
-        /* Опция обрешетки */
-        .crate-option {
-            background-color: var(--input-bg);
+        /* Результат цены (в стиле input) */
+        .price-result-box {
+            background-color: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 18px 24px; /* Согласовано с остальными элементами */
-            cursor: pointer;
-            transition: all 0.2s;
+            height: 100%;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-        }
-        .crate-option.active {
-            background-color: rgba(59, 130, 246, 0.15);
-            border-color: var(--accent-color);
-        }
-        .crate-option .crate-text {
-            color: white;
-            font-weight: bold;
+            justify-content: center;
             font-size: 18px;
-        }
-        .crate-option .crate-price {
+            font-weight: 700;
             color: var(--text-secondary);
-            font-size: 14px;
+        }
+        .price-result-box.active-price {
+            color: #fff;
+            border-color: var(--border-active);
+            box-shadow: var(--accent-glow);
+            text-shadow: 0 0 10px rgba(129, 140, 248, 0.5);
         }
 
-        /* Radio Group */
-        .delivery-option {
-            background-color: var(--input-bg);
+        /* --- ВЫБОР (SELECT) --- */
+        .custom-select-trigger {
+            background-color: rgba(0, 0, 0, 0.3);
+            color: var(--text-color);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 18px 24px; /* Увеличено */
+            padding: 18px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             cursor: pointer;
-            transition: all 0.2s;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        /* --- ОПЦИИ (Обрешетка / Доставка) --- */
+        .option-box {
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px 20px;
+            cursor: pointer;
+            transition: all 0.3s;
             position: relative;
             overflow: hidden;
         }
-        .delivery-option.active {
-            background-color: rgba(59, 130, 246, 0.15);
-            border-color: var(--accent-color);
+        
+        .option-box.active {
+            background-color: rgba(99, 102, 241, 0.15);
+            border-color: var(--border-active);
+            box-shadow: var(--accent-glow);
         }
         
-        /* Bottom Sheet */
+        /* Flex для обрешетки */
+        .crate-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .option-title {
+            color: #fff;
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+        .option-sub {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .option-price {
+            color: var(--border-active);
+            font-weight: bold;
+        }
+
+        /* --- BOTTOM SHEET (Модалка) --- */
         .sheet-overlay {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             z-index: 100;
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s;
-            backdrop-filter: blur(3px);
+            backdrop-filter: blur(8px);
         }
         .sheet-overlay.open {
             opacity: 1;
@@ -179,14 +213,16 @@
             bottom: -100%;
             left: 0;
             right: 0;
-            background-color: var(--card-bg);
+            background-color: #121217;
+            border-top: 1px solid var(--border-active);
             border-top-left-radius: 24px;
             border-top-right-radius: 24px;
             z-index: 101;
-            padding: 20px 16px 40px 16px;
-            transition: bottom 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-            max-height: 85vh;
+            padding: 24px 16px 40px 16px;
+            transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+            max-height: 80vh;
             overflow-y: auto;
+            box-shadow: 0 -5px 30px rgba(99, 102, 241, 0.2);
         }
         .sheet-overlay.open .sheet-content {
             bottom: 0;
@@ -195,14 +231,14 @@
         .sheet-handle {
             width: 40px;
             height: 4px;
-            background-color: #3a3a3c;
+            background-color: #3f3f46;
             border-radius: 2px;
             margin: 0 auto 20px auto;
         }
 
         .sheet-option {
             padding: 20px 16px;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
             color: var(--text-color);
             display: flex;
             justify-content: space-between;
@@ -213,64 +249,67 @@
             border-bottom: none;
         }
         .sheet-option:active {
-            background-color: var(--input-bg);
+            background-color: rgba(255,255,255,0.05);
         }
         .sheet-option.selected {
-            color: var(--accent-color);
+            color: #818cf8;
             font-weight: 600;
         }
 
-        /* Label Styles */
+        /* --- ЗАГОЛОВКИ --- */
         .section-label {
             display: block;
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-secondary);
-            margin-bottom: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #818cf8; /* Неоновый цвет заголовков */
+            margin-bottom: 12px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding-left: 4px; /* Чуть сдвинуто */
+            padding-left: 4px;
+            text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+        }
+        
+        h2 {
+            text-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
         }
 
-        /* Tab Animation */
-        .tab-content {
-            display: none;
-            animation: fadeIn 0.3s ease-in-out;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        /* --- ТАБЫ --- */
+        .tab-content { display: none; animation: fadeIn 0.4s ease-out; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Fixed Areas */
+        /* --- ФИКСИРОВАННЫЕ ЭЛЕМЕНТЫ --- */
         .action-bar {
             position: fixed;
-            bottom: 65px;
+            bottom: 85px; /* Над навигацией */
             left: 0;
             width: 100%;
-            padding: 12px 16px;
-            background-color: var(--bg-color); 
-            border-top: 1px solid var(--border-color); 
+            padding: 0 16px;
             z-index: 40;
-            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+            pointer-events: none; /* Чтобы клики проходили сквозь пустоту */
+        }
+        .action-bar button {
+            pointer-events: auto;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.5);
         }
 
+        /* --- НАВИГАЦИЯ (NEON STYLE) --- */
         .bottom-nav {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 65px;
-            background-color: var(--card-bg);
-            border-top: 1px solid var(--border-color);
+            bottom: 20px;
+            left: 16px;
+            right: 16px;
+            height: 60px;
+            background-color: rgba(20, 20, 25, 0.85);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
             display: flex;
             justify-content: space-around;
             align-items: center;
             z-index: 50;
-            padding-bottom: env(safe-area-inset-bottom);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
         .nav-item {
@@ -278,37 +317,49 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-secondary);
             width: 33%;
             height: 100%;
+            transition: all 0.3s;
+            position: relative;
         }
-        .nav-item.active {
-            color: var(--accent-color);
-        }
+        
         .nav-item i {
-            font-size: 22px;
-            margin-bottom: 4px;
+            font-size: 20px;
+            margin-bottom: 3px;
+            transition: all 0.3s;
+        }
+        
+        .nav-item.active {
+            color: #fff;
+        }
+        .nav-item.active i {
+            color: #818cf8;
+            filter: drop-shadow(0 0 8px rgba(129, 140, 248, 0.6));
+            transform: translateY(-2px);
         }
 
+        /* --- ФОТО --- */
         .photo-btn {
             width: 80px;
             height: 80px;
             border-radius: 18px;
-            background-color: var(--input-bg);
+            background-color: rgba(0,0,0,0.2);
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            border: 1px solid var(--border-color);
+            border: 1px dashed var(--border-color);
             flex-shrink: 0;
+            transition: all 0.2s;
         }
-        .photo-btn i {
-            color: var(--text-secondary);
-            font-size: 24px;
+        .photo-btn:active {
+            border-color: var(--border-active);
+            background-color: rgba(99, 102, 241, 0.1);
         }
+        .photo-btn i { color: var(--text-secondary); font-size: 24px; }
 
-        /* Preview Item Styles */
         .preview-item {
             width: 80px;
             height: 80px;
@@ -318,58 +369,44 @@
             position: relative;
             flex-shrink: 0;
         }
-        .preview-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+        .preview-item img { width: 100%; height: 100%; object-fit: cover; }
         .preview-remove {
             position: absolute;
-            top: 4px;
-            right: 4px;
+            top: 4px; right: 4px;
             background: rgba(0,0,0,0.6);
             color: white;
             border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            cursor: pointer;
+            width: 20px; height: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; cursor: pointer;
             backdrop-filter: blur(2px);
         }
 
-        /* Распорка для прокрутки - ГАРАНТИЯ ДОСТУПА К КНОПКЕ "ДОБАВИТЬ" */
-        .scroll-spacer {
-            height: 180px; 
-            width: 100%;
-            flex-shrink: 0;
-        }
+        .scroll-spacer { height: 200px; width: 100%; flex-shrink: 0; }
     </style>
 </head>
 <body class="p-4">
 
     <!-- TAB 1: CALCULATOR -->
     <div id="tab-calc" class="tab-content active">
-        <h2 class="text-3xl font-bold mb-6 px-1 text-white">Калькулятор</h2>
+        <h2 class="text-3xl font-bold mb-6 px-2 text-white">Калькулятор</h2>
         
-        <div class="space-y-6">
+        <div class="space-y-5">
             <div class="card p-5">
                 <label class="section-label">Упаковка</label>
                 
                 <div class="custom-select-trigger mb-4" onclick="openBoxSheet()">
                     <span id="selectedBoxName" class="font-medium">Выберите упаковку</span>
-                    <i class="fas fa-chevron-down"></i>
+                    <i class="fas fa-chevron-down text-gray-400"></i>
                 </div>
                 
                 <!-- CRATE TOGGLE -->
-                <div class="crate-option" id="crateOption" onclick="toggleCrate()">
-                    <span class="crate-text">Обрешетка</span>
-                    <span class="crate-price">+299 ₽</span>
+                <div class="option-box crate-row" id="crateOption" onclick="toggleCrate()">
+                    <span class="option-title">Обрешетка</span>
+                    <span class="option-price">+299 ₽</span>
                 </div>
 
-                <div id="boxDesc" class="mt-4 text-[15px] leading-relaxed text-[var(--text-secondary)] bg-[var(--input-bg)] p-4 rounded-2xl hidden"></div>
+                <div id="boxDesc" class="mt-4 text-[15px] leading-relaxed text-[var(--text-secondary)] bg-[rgba(0,0,0,0.3)] p-4 rounded-2xl hidden border border-[var(--border-color)]"></div>
             </div>
 
             <div id="customDims" class="hidden animate-fade-in">
@@ -386,15 +423,15 @@
                 </div>
             </div>
 
-            <div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl p-8 text-white text-center shadow-lg mt-4">
-                <span class="text-blue-200 text-base font-medium uppercase tracking-wide">Ориентировочная стоимость</span>
-                <div class="text-5xl font-extrabold mt-3 tracking-tight">
+            <div class="card p-6 text-center" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(55, 48, 163, 0.2) 100%); border-color: var(--border-active);">
+                <span class="text-indigo-200 text-sm font-medium uppercase tracking-widest" style="text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);">Ориентировочно</span>
+                <div class="text-5xl font-extrabold mt-3 tracking-tight text-white" style="text-shadow: 0 0 20px rgba(129, 140, 248, 0.6);">
                     <span id="totalPrice">0</span> ₽
                 </div>
             </div>
             
-            <p class="text-[12px] text-center text-[var(--text-secondary)] px-4 mt-4 leading-relaxed opacity-70">
-                *Итоговая стоимость фиксируется после взвешивания на складе.
+            <p class="text-[12px] text-center text-[var(--text-secondary)] px-4 mt-2 opacity-60">
+                *Итоговая стоимость фиксируется на складе.
             </p>
         </div>
         <div class="scroll-spacer"></div>
@@ -402,25 +439,25 @@
 
     <!-- TAB 2: ORDER (BUYOUT) -->
     <div id="tab-order" class="tab-content">
-        <h2 class="text-3xl font-bold mb-6 px-1 text-white">Выкуп</h2>
+        <h2 class="text-3xl font-bold mb-6 px-2 text-white">Выкуп</h2>
         
         <div class="card p-5 mb-6">
             <label class="section-label">Тип доставки</label>
-            <div class="grid grid-cols-1 gap-4">
-                <div class="delivery-option active" onclick="setDeliveryType('grey')" id="del-grey">
-                    <div class="font-bold text-white text-lg mb-1">Серая доставка</div>
-                    <div class="text-sm text-[var(--text-secondary)]">20-35 дней • Комиссия 5%</div>
+            <div class="grid grid-cols-1 gap-3">
+                <div class="option-box active" onclick="setDeliveryType('grey')" id="del-grey">
+                    <div class="option-title">Серая доставка</div>
+                    <div class="option-sub">20-35 дней • Комиссия 5%</div>
                 </div>
-                <div class="delivery-option" onclick="setDeliveryType('white')" id="del-white">
-                    <div class="font-bold text-white text-lg mb-1">Белая доставка</div>
-                    <div class="text-sm text-[var(--text-secondary)]">12-15 дней • Комиссия 10%</div>
+                <div class="option-box" onclick="setDeliveryType('white')" id="del-white">
+                    <div class="option-title">Белая доставка</div>
+                    <div class="option-sub">12-15 дней • Комиссия 10%</div>
                 </div>
             </div>
         </div>
 
         <div id="orderItemsList" class="space-y-4"></div>
         
-        <button onclick="addOrderItem()" class="w-full mt-6 py-5 btn-secondary gap-2">
+        <button onclick="addOrderItem()" class="w-full mt-6 py-4 btn-secondary gap-2 border-dashed">
             <i class="fas fa-plus text-lg"></i> 
             <span class="text-lg">Добавить товар</span>
         </button>
@@ -430,9 +467,9 @@
 
     <!-- TAB 3: SEARCH -->
     <div id="tab-search" class="tab-content">
-        <h2 class="text-3xl font-bold mb-6 px-1 text-white">Поиск</h2>
+        <h2 class="text-3xl font-bold mb-6 px-2 text-white">Поиск</h2>
         <div id="searchItemsList" class="space-y-4"></div>
-        <button onclick="addSearchItem()" class="w-full mt-6 py-5 btn-secondary gap-2">
+        <button onclick="addSearchItem()" class="w-full mt-6 py-4 btn-secondary gap-2 border-dashed">
             <i class="fas fa-plus text-lg"></i> 
             <span class="text-lg">Добавить позицию</span>
         </button>
@@ -440,7 +477,7 @@
         <div class="scroll-spacer"></div>
     </div>
 
-    <!-- BOTTOM SHEET FOR BOX SELECTION -->
+    <!-- BOTTOM SHEET -->
     <div class="sheet-overlay" id="boxSheet" onclick="closeBoxSheet(event)">
         <div class="sheet-content" onclick="event.stopPropagation()">
             <div class="sheet-handle" onclick="closeBoxSheet()"></div>
@@ -448,38 +485,38 @@
             
             <div class="sheet-option" onclick="selectBox('Mini', 679, 'Вещи (футболка, сумка, ремень, носки)')">
                 <div class="flex flex-col">
-                    <span class="text-lg font-medium">Mini</span>
+                    <span class="text-lg font-medium text-white">Mini</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">23x17x13 см, до 0.6 кг</span>
                 </div>
-                <span class="text-blue-400 font-bold text-lg">679 ₽</span>
+                <span class="text-indigo-400 font-bold text-lg">679 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('Small', 1562, 'Пара обуви в коробке')">
                  <div class="flex flex-col">
-                    <span class="text-lg font-medium">Small</span>
+                    <span class="text-lg font-medium text-white">Small</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">36x26x14 см, до 1.5 кг</span>
                 </div>
-                <span class="text-blue-400 font-bold text-lg">1562 ₽</span>
+                <span class="text-indigo-400 font-bold text-lg">1562 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('Large', 2411, 'Пара обуви в коробке + несколько вещей')">
                  <div class="flex flex-col">
-                    <span class="text-lg font-medium">Large</span>
+                    <span class="text-lg font-medium text-white">Large</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">40x29x16 см, до 2.5 кг</span>
                 </div>
-                <span class="text-blue-400 font-bold text-lg">2411 ₽</span>
+                <span class="text-indigo-400 font-bold text-lg">2411 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('X-Large', 3489, 'Две пары обуви в коробке + несколько вещей')">
                  <div class="flex flex-col">
-                    <span class="text-lg font-medium">X-Large</span>
+                    <span class="text-lg font-medium text-white">X-Large</span>
                     <span class="text-sm text-[var(--text-secondary)] mt-1">37x29x28 см, до 3.5 кг</span>
                 </div>
-                <span class="text-blue-400 font-bold text-lg">3489 ₽</span>
+                <span class="text-indigo-400 font-bold text-lg">3489 ₽</span>
             </div>
             
             <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
-                <span class="text-lg">Свой размер</span>
+                <span class="text-lg text-white">Свой размер</span>
                 <span class="text-[var(--text-secondary)] text-sm">Калькулятор</span>
             </div>
         </div>
@@ -492,7 +529,7 @@
         <button id="btn-action-search" onclick="sendSearch()" class="btn-main w-full py-4 text-lg shadow-xl hidden">Найти</button>
     </div>
 
-    <!-- BOTTOM NAVIGATION -->
+    <!-- BOTTOM NAVIGATION (FLOATING) -->
     <div class="bottom-nav">
         <div class="nav-item active" onclick="switchTab('calc')">
             <i class="fas fa-calculator"></i>
@@ -513,8 +550,9 @@
         
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.setHeaderColor('#0f0f0f');
-        tg.setBackgroundColor('#0f0f0f');
+        // Устанавливаем цвета хедера под тему
+        tg.setHeaderColor('#050505');
+        tg.setBackgroundColor('#050505');
 
         const RATE_MULTIPLIER = 13; 
         
@@ -554,7 +592,7 @@
 
         function setDeliveryType(type) {
             deliveryType = type;
-            document.querySelectorAll('.delivery-option').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.option-box').forEach(el => el.classList.remove('active'));
             document.getElementById(`del-${type}`).classList.add('active');
             orderItems.forEach(item => {
                 updateOrderItem(item.id, 'price', item.price, true);
@@ -634,11 +672,9 @@
             let price = 0;
             
             if (currentBox.type === 'custom') {
-                // Если выбран Свой размер, цена всегда 0 (не считаем)
                 price = 0;
             } else {
                 price = currentBox.price;
-                // Для стандартных коробок добавляем обрешетку к цене
                 if (price > 0 && hasCrate) {
                     price += 299;
                 }
@@ -648,35 +684,36 @@
         }
 
         function sendCalc() {
-            if (!currentBox.type) return tg.showAlert("Выберите упаковку!");
-            
-            // Валидация для Своего размера: проверяем поля
-            if (currentBox.type === 'custom') {
-                const l = document.getElementById('dimL').value;
-                const w = document.getElementById('dimW').value;
-                const h = document.getElementById('dimH').value;
-                const weight = document.getElementById('weight').value;
+            try {
+                if (!currentBox.type) return alert("Выберите упаковку!");
+                if (currentBox.type === 'custom') {
+                    const l = document.getElementById('dimL').value;
+                    const w = document.getElementById('dimW').value;
+                    const h = document.getElementById('dimH').value;
+                    const weight = document.getElementById('weight').value;
+                    if (!l || !w || !h || !weight) return alert("Введите габариты и вес!");
+                }
                 
-                if (!l || !w || !h || !weight) return tg.showAlert("Введите габариты и вес!");
+                let data = { 
+                    type: 'calc', 
+                    packPrice: document.getElementById('totalPrice').innerText,
+                    hasCrate: hasCrate 
+                };
+                
+                if (currentBox.type === 'custom') {
+                    data.boxName = 'Свой размер';
+                    data.l = document.getElementById('dimL').value;
+                    data.w = document.getElementById('dimW').value;
+                    data.h = document.getElementById('dimH').value;
+                    data.weight = document.getElementById('weight').value;
+                } else {
+                    data.boxName = `Коробка ${currentBox.type}`;
+                    data.l = currentBox.l; data.w = currentBox.w; data.h = currentBox.h;
+                }
+                tg.sendData(JSON.stringify(data));
+            } catch (e) {
+                alert("Ошибка: " + e.message);
             }
-            
-            let data = { 
-                type: 'calc', 
-                packPrice: document.getElementById('totalPrice').innerText,
-                hasCrate: hasCrate 
-            };
-            
-            if (currentBox.type === 'custom') {
-                data.boxName = 'Свой размер';
-                data.l = document.getElementById('dimL').value;
-                data.w = document.getElementById('dimW').value;
-                data.h = document.getElementById('dimH').value;
-                data.weight = document.getElementById('weight').value;
-            } else {
-                data.boxName = `Коробка ${currentBox.type}`;
-                data.l = currentBox.l; data.w = currentBox.w; data.h = currentBox.h;
-            }
-            tg.sendData(JSON.stringify(data));
         }
 
         function updateItemNumbers(type) {
@@ -684,7 +721,6 @@
             const prefix = type === 'order' ? 'Товар' : 'Позиция';
             const container = document.getElementById(listId);
             const labels = container.querySelectorAll('.section-label');
-            
             labels.forEach((label, index) => {
                 label.innerText = `${prefix} №${index + 1}`;
             });
@@ -694,21 +730,21 @@
             const id = Date.now();
             const html = `
                 <div id="order-item-${id}" class="card p-5 relative animate-fade-in">
-                    <button onclick="removeElement('order-item-${id}', 'order')" class="delete-btn absolute top-4 right-4 text-[var(--danger-color)] p-2">
+                    <button onclick="removeElement('order-item-${id}', 'order')" class="delete-btn absolute top-4 right-4 text-[var(--danger-color)] p-2 hover:bg-white/10 rounded-full transition">
                         <i class="fas fa-times text-xl"></i>
                     </button>
                     <label class="section-label">Товар</label> 
                     <input type="text" class="mb-4" placeholder="Ссылка на товар" onchange="updateOrderItem(${id}, 'link', this.value)">
-                    <div class="flex gap-4 mb-4">
-                        <div class="w-1/2">
-                            <input type="number" placeholder="Цена (¥)" oninput="updateOrderItem(${id}, 'price', this.value)">
+                    <div class="flex gap-4 mb-4" style="height: 58px;">
+                        <div class="w-1/2 h-full">
+                            <input type="number" placeholder="Цена (¥)" style="height: 100%;" oninput="updateOrderItem(${id}, 'price', this.value)">
                         </div>
-                        <div class="w-1/2 bg-[var(--input-bg)] rounded-2xl flex items-center justify-center border border-[var(--border-color)]">
-                            <span id="res-rub-${id}" class="text-xl font-bold text-[var(--text-secondary)]">0 ₽</span>
+                        <div class="w-1/2 h-full">
+                            <div id="res-rub-${id}" class="price-result-box">0 ₽</div>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2 items-center" id="preview-area-${id}">
-                        <label class="photo-btn hover:border-blue-500 transition-colors">
+                        <label class="photo-btn">
                             <i class="fas fa-camera"></i>
                             <input type="file" accept="image/*" multiple class="hidden" onchange="handleImageUpload(this, ${id}, 'order')">
                         </label>
@@ -729,18 +765,21 @@
                 const val = parseFloat(value) || 0;
                 item.price = val;
                 
+                const resBox = document.getElementById(`res-rub-${id}`);
+                
                 if (val === 0) {
-                     document.getElementById(`res-rub-${id}`).innerText = `0 ₽`;
+                     resBox.innerText = `0 ₽`;
+                     resBox.classList.remove('active-price');
                      item.resYuan = 0;
                 } else {
                     const commission = deliveryType === 'white' ? 0.10 : 0.05;
-                    // Формула: (Цена + 30 + Комиссия) * 13
                     const priceWithShipping = val + 30;
                     const commissionSum = priceWithShipping * commission;
                     const rub = Math.ceil((priceWithShipping + commissionSum) * RATE_MULTIPLIER);
                     
                     item.resYuan = val; 
-                    document.getElementById(`res-rub-${id}`).innerText = `${rub} ₽`;
+                    resBox.innerText = `${rub} ₽`;
+                    resBox.classList.add('active-price');
                 }
             } else {
                 item[field] = value;
@@ -748,26 +787,30 @@
         }
 
         function sendOrder() {
-            if (orderItems.length === 0) return tg.showAlert("Пустой заказ!");
-            const data = { 
-                type: 'order', 
-                items: orderItems,
-                deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)'
-            };
-            tg.sendData(JSON.stringify(data));
+            try {
+                if (orderItems.length === 0) return alert("Пустой заказ!");
+                const data = { 
+                    type: 'order', 
+                    items: orderItems,
+                    deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)'
+                };
+                tg.sendData(JSON.stringify(data));
+            } catch (e) {
+                alert("Ошибка: " + e.message);
+            }
         }
 
         function addSearchItem() {
             const id = Date.now();
             const html = `
                 <div id="search-item-${id}" class="card p-5 relative animate-fade-in">
-                    <button onclick="removeElement('search-item-${id}', 'search')" class="delete-btn absolute top-4 right-4 text-[var(--danger-color)] p-2">
+                    <button onclick="removeElement('search-item-${id}', 'search')" class="delete-btn absolute top-4 right-4 text-[var(--danger-color)] p-2 hover:bg-white/10 rounded-full transition">
                         <i class="fas fa-times text-xl"></i>
                     </button>
                     <label class="section-label">Позиция</label>
                     <textarea class="mb-4 h-28 resize-none" placeholder="Комментарий" onchange="updateSearchItem(${id}, 'comment', this.value)"></textarea>
                     <div class="flex flex-wrap gap-2 items-center" id="search-preview-area-${id}">
-                        <label class="photo-btn hover:border-blue-500 transition-colors">
+                        <label class="photo-btn">
                             <i class="fas fa-camera"></i>
                             <input type="file" accept="image/*" multiple class="hidden" onchange="handleImageUpload(this, ${id}, 'search')">
                         </label>
@@ -854,11 +897,11 @@
                         
                         btnLabel.insertAdjacentElement('beforebegin', imgDiv);
                     } else {
-                        tg.showAlert("Ошибка загрузки фото");
+                        alert("Ошибка загрузки фото: " + (data.error ? data.error.message : 'Неизвестная ошибка'));
                     }
                 } catch (error) {
                     if(document.getElementById(loadId)) document.getElementById(loadId).remove();
-                    tg.showAlert("Ошибка сети");
+                    alert("Ошибка сети при загрузке фото");
                 }
             }
             input.value = '';
@@ -874,8 +917,12 @@
         }
 
         function sendSearch() {
-            if (searchItems.length === 0) return tg.showAlert("Пустой поиск!");
-            tg.sendData(JSON.stringify({ type: 'search', items: searchItems }));
+            try {
+                if (searchItems.length === 0) return alert("Пустой поиск!");
+                tg.sendData(JSON.stringify({ type: 'search', items: searchItems }));
+            } catch (e) {
+                alert("Ошибка: " + e.message);
+            }
         }
         
         // Init
