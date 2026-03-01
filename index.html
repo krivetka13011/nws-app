@@ -661,7 +661,10 @@
 
         function openOrderHelp() {
             try {
-                if (tg && typeof tg.openLink === 'function') {
+                if (tg && typeof tg.openTelegramLink === 'function') {
+                    // Открываем статью через внутренний Telegraph/Instant View Telegram
+                    tg.openTelegramLink(ORDER_HELP_URL);
+                } else if (tg && typeof tg.openLink === 'function') {
                     tg.openLink(ORDER_HELP_URL);
                 } else {
                     window.open(ORDER_HELP_URL, '_blank');
