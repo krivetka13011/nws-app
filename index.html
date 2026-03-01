@@ -486,16 +486,84 @@
         let deliveryType = 'grey'; 
         let historyDataCache = [];
 
-        // --- WRAPPERS FOR CLOUD STORAGE ---
+        // --- WRAPPERS ДЛЯ ХРАНИЛИЩА (CloudStorage + fallback в localStorage) ---
+        const hasCloudStorage = tg && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function';
+
         const cloudStorage = {
             getItem: (key) => new Promise((resolve) => {
-                tg.CloudStorage.getItem(key, (err, value) => resolve(!err ? value : null));
+                if (!hasCloudStorage) {
+                    try {
+                        resolve(localStorage.getItem(key));
+                    } catch (e) {
+                        console.error('localStorage getItem error', e);
+                        resolve(null);
+                    }
+                    return;
+                }
+                tg.CloudStorage.getItem(key, (err, value) => {
+                    if (err) {
+                        console.error('CloudStorage getItem error', key, err);
+                        try {
+                            resolve(localStorage.getItem(key));
+                        } catch (e) {
+                            resolve(null);
+                        }
+                    } else {
+                        resolve(value);
+                    }
+                });
             }),
             setItem: (key, value) => new Promise((resolve, reject) => {
-                tg.CloudStorage.setItem(key, value, (err, stored) => err ? reject(err) : resolve(stored));
+                if (!hasCloudStorage) {
+                    try {
+                        localStorage.setItem(key, value);
+                        resolve(true);
+                    } catch (e) {
+                        console.error('localStorage setItem error', e);
+                        reject(e);
+                    }
+                    return;
+                }
+                tg.CloudStorage.setItem(key, value, (err, stored) => {
+                    if (err) {
+                        console.error('CloudStorage setItem error', key, err);
+                        try {
+                            localStorage.setItem(key, value);
+                        } catch (e) {}
+                        reject(err);
+                    } else {
+                        try {
+                            localStorage.setItem(key, value);
+                        } catch (e) {}
+                        resolve(stored);
+                    }
+                });
             }),
             removeItem: (key) => new Promise((resolve, reject) => {
-                tg.CloudStorage.removeItem(key, (err, deleted) => err ? reject(err) : resolve(deleted));
+                if (!hasCloudStorage) {
+                    try {
+                        localStorage.removeItem(key);
+                        resolve(true);
+                    } catch (e) {
+                        console.error('localStorage removeItem error', e);
+                        reject(e);
+                    }
+                    return;
+                }
+                tg.CloudStorage.removeItem(key, (err, deleted) => {
+                    if (err) {
+                        console.error('CloudStorage removeItem error', key, err);
+                        try {
+                            localStorage.removeItem(key);
+                        } catch (e) {}
+                        reject(err);
+                    } else {
+                        try {
+                            localStorage.removeItem(key);
+                        } catch (e) {}
+                        resolve(deleted);
+                    }
+                });
             })
         };
 
@@ -510,7 +578,7 @@
             try {
                 let storageObj = JSON.parse(JSON.stringify(dataObj));
                 
-                // Optimize if needed, but keeping text is priority now
+                // Оптимизация размера записи (Telegram Cloud Storage имеет лимиты)
                 if (JSON.stringify(storageObj).length > 3500) {
                      if(storageObj.itemsData) {
                          storageObj.itemsData = storageObj.itemsData.map(i => {
@@ -534,21 +602,42 @@
                 }
                 
                 await cloudStorage.setItem('nws_history_idx', JSON.stringify(index));
+
+                // Параллельно поддерживаем старый формат 'nws_history' для совместимости
+                let legacy = [];
+                const legacyStr = await cloudStorage.getItem('nws_history');
+                if (legacyStr) {
+                    try { legacy = JSON.parse(legacyStr) || []; } catch (e) { legacy = []; }
+                }
+                legacy.unshift(storageObj);
+                if (legacy.length > 20) legacy = legacy.slice(0, 20);
+                await cloudStorage.setItem('nws_history', JSON.stringify(legacy));
             } catch (e) { console.error("History save error:", e); }
         }
 
         async function loadFullHistory() {
+            // Новый формат с индексом
             const index = await getHistoryIndex();
-            if (!index || index.length === 0) return [];
-            
-            const historyItems = [];
-            for (const key of index) {
-                const res = await cloudStorage.getItem(key);
-                if (res) {
-                    try { historyItems.push(JSON.parse(res)); } catch (e) {}
+            if (index && index.length > 0) {
+                const historyItems = [];
+                for (const key of index) {
+                    const res = await cloudStorage.getItem(key);
+                    if (res) {
+                        try { historyItems.push(JSON.parse(res)); } catch (e) {}
+                    }
                 }
+                if (historyItems.length > 0) return historyItems;
             }
-            return historyItems;
+
+            // Fallback: старый массив 'nws_history'
+            const legacyStr = await cloudStorage.getItem('nws_history');
+            if (!legacyStr) return [];
+            try {
+                const arr = JSON.parse(legacyStr);
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) {
+                return [];
+            }
         }
 
         // --- UI LOGIC ---
@@ -801,7 +890,7 @@
             });
         }
 
-        function sendOrder() {
+        async function sendOrder() {
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
                 let totalRub = 0;
@@ -824,7 +913,7 @@
                     price: priceHtml,
                     itemsData: orderItems, images: historyImages
                 };
-                addToHistoryV2(historyObj);
+                await addToHistoryV2(historyObj);
                 const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
                 tg.sendData(JSON.stringify(data));
             } catch (e) { alert("Ошибка: " + e.message); }
@@ -965,4 +1054,3 @@
     </script>
 </body>
 </html>
-
