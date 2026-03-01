@@ -375,7 +375,12 @@
 
     <!-- TAB 2: ORDER -->
     <div id="tab-order" class="tab-content">
-        <h2 class="text-3xl font-bold mb-6 px-2 text-white">Выкуп</h2>
+        <div class="flex items-center justify-between mb-6 px-2">
+            <h2 class="text-3xl font-bold text-white">Выкуп</h2>
+            <button onclick="openOrderHelp()" class="w-9 h-9 rounded-full border border-[var(--border-color)] flex items-center justify-center text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">
+                <i class="fas fa-question"></i>
+            </button>
+        </div>
         <div class="card p-5 mb-6">
             <label class="section-label">Тип доставки</label>
             <div class="grid grid-cols-1 gap-3">
@@ -479,6 +484,7 @@
         tg.setHeaderColor('#050505');
         tg.setBackgroundColor('#050505');
         const RATE_MULTIPLIER = 13; 
+        const ORDER_HELP_URL = 'https://krivetka13011.github.io/nws-app/?v='; 
         
         let currentTab = 'calc';
         let orderItems = [];
@@ -648,6 +654,18 @@
         }
         function closeLightbox() {
             document.getElementById('lightbox').classList.remove('open');
+        }
+
+        function openOrderHelp() {
+            try {
+                if (tg && typeof tg.openLink === 'function') {
+                    tg.openLink(ORDER_HELP_URL);
+                } else {
+                    window.open(ORDER_HELP_URL, '_blank');
+                }
+            } catch (e) {
+                window.open(ORDER_HELP_URL, '_blank');
+            }
         }
 
         function formatLinks(text) {
