@@ -1,0 +1,69 @@
+{
+  "1772481980536": {
+    "id": "1772481980536",
+    "userId": 8251158248,
+    "chatId": 8251158248,
+    "username": "@EzSale1",
+    "totalYuan": 100,
+    "totalRub": 1300,
+    "items": [
+      {
+        "id": 1772481931121,
+        "link": "Jhvcc",
+        "price": 100,
+        "resYuan": 100,
+        "imgUrls": []
+      }
+    ],
+    "createdAt": "2026-03-02T20:06:20.536Z",
+    "orderPaid": false,
+    "deliveryPriceRub": null,
+    "deliveryPaid": false
+  },
+  "1772482018684": {
+    "id": "1772482018684",
+    "userId": 8251158248,
+    "chatId": 8251158248,
+    "username": "@EzSale1",
+    "totalYuan": 100,
+    "totalRub": 1300,
+    "items": [
+      {
+        "id": 1772482002294,
+        "link": "Hhgd",
+        "price": 100,
+        "resYuan": 100,
+        "imgUrls": [
+          "https://i.ibb.co/kWkdJMT/92030.jpg"
+        ]
+      }
+    ],
+    "createdAt": "2026-03-02T20:06:58.684Z",
+    "orderPaid": false,
+    "deliveryPriceRub": null,
+    "deliveryPaid": false
+  },
+  "1772482764308": {
+    "id": "1772482764308",
+    "userId": 8251158248,
+    "chatId": 8251158248,
+    "username": "@EzSale1",
+    "totalYuan": 100,
+    "totalRub": 1300,
+    "items": [
+      {
+        "id": 1772482739725,
+        "link": "Jdhdhdhd",
+        "price": 100,
+        "resYuan": 100,
+        "imgUrls": [
+          "https://i.ibb.co/dsxdqNBJ/92025.jpg"
+        ]
+      }
+    ],
+    "createdAt": "2026-03-02T20:19:24.308Z",
+    "orderPaid": false,
+    "deliveryPriceRub": null,
+    "deliveryPaid": false
+  }
+}

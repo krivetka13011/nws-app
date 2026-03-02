@@ -1,0 +1,20 @@
+{
+  "name": "tg-bot-cursor",
+  "version": "1.0.0",
+  "description": "Telegram bot for NWS Logistics (WebApp + Node.js bot)",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "webapp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
