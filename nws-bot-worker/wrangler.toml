@@ -2,7 +2,13 @@ name = "nwsnumbot"
 main = "index.js"
 compatibility_date = "2026-03-02"
 
+[[kv_namespaces]]
+binding = "CLIENTS"
+id = "c638f4e8ab67463c9882857c8b93c063"
+
 [vars]
 MANAGER_ID = 1159166497
 APP_URL = "https://krivetka13011.github.io/nws-app/"
 WEBHOOK_SECRET = "nws-secret-123"  # можно поменять на любое слово
+# GROUP_ID — добавьте в Cloudflare Dashboard (Variables) когда настроите группу.
+# См. SETUP_CRM.md
