@@ -168,10 +168,19 @@ async function handleCalc(env, chatId, data) {
   });
 }
 
+// Серая: (цена + 30) × 1.05 × 13
+// Белая: (цена + 30) × 1.10 × 13
+function calcRub(priceYuan, isWhite) {
+  const p = Number(priceYuan) || 0;
+  const mult = isWhite ? 1.10 : 1.05;
+  return Math.ceil((p + 30) * mult * 13);
+}
+
 async function handleOrder(env, chatId, user, data) {
   const items = Array.isArray(data.items) ? data.items : [];
-  // Используем resRub из WebApp (расчёт с доставкой и комиссией), иначе fallback
-  const totalRub = items.reduce((sum, it) => sum + (Number(it.resRub) || 0), 0);
+  const isWhite = /белая|white/i.test(data.deliveryType || '');
+
+  const totalRub = items.reduce((sum, it) => sum + calcRub(it.price ?? it.resYuan ?? 0, isWhite), 0);
   const totalYuan = items.reduce((sum, it) => {
     const v = Number(it.resYuan ?? it.price ?? 0);
     return sum + (Number.isNaN(v) ? 0 : v);
@@ -196,8 +205,7 @@ async function handleOrder(env, chatId, user, data) {
   for (let idx = 0; idx < items.length; idx++) {
     const item = items[idx];
     const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
-    // resRub из WebApp (с доставкой 30¥ и комиссией 5%/10%), иначе fallback: price * 13
-    const resRub = Number(item.resRub) || Math.ceil(resYuan * 13);
+    const resRub = calcRub(item.price ?? resYuan, isWhite);
     const link = item.link || 'Не указана';
 
     const textMsg =
