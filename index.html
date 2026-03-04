@@ -288,48 +288,23 @@
         }
 
         /* Detail Sheet Styles */
-        .history-detail-scroll { max-height: 70vh; overflow-y: auto; padding-bottom: 40px; }
+        .history-detail-scroll { max-height: 55vh; overflow-y: auto; padding-bottom: 10px; }
         .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .detail-label { color: var(--text-secondary); font-size: 14px; }
         .detail-value { color: #fff; font-weight: 500; font-size: 14px; text-align: right;}
         .detail-item-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); }
         
-        /* Исправлен хэдер детализации для переноса текста и выравнивания цены */
         .detail-item-header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: flex-start; /* Цена и текст начинаются сверху */
-            margin-bottom: 8px; 
-            gap: 10px;
+            display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; gap: 10px;
         }
         
-        /* ИСПРАВЛЕНИЕ ТЕКСТА: Белый цвет, перенос слов */
         .detail-item-link { 
-            color: #ffffff; /* Белый цвет основного текста */
-            font-size: 14px; 
-            text-decoration: none; /* Без подчеркивания */
-            word-wrap: break-word; /* Перенос длинных слов */
-            word-break: break-word; 
-            white-space: pre-wrap; /* Сохранение переносов */
-            line-height: 1.4;
-            flex: 1; /* Занимает доступное место */
+            color: #ffffff; font-size: 14px; text-decoration: none; 
+            word-wrap: break-word; word-break: break-word; white-space: pre-wrap; line-height: 1.4; flex: 1; 
         }
-        /* Стиль для самой ссылки (синий и подчеркнутый) */
-        .link-url {
-            color: #60a5fa;
-            text-decoration: underline;
-            word-break: break-all; /* Ссылки можно рвать в любом месте */
-        }
+        .link-url { color: #60a5fa; text-decoration: underline; word-break: break-all; }
         
-        /* Цена в две строки в детализации */
-        .detail-item-price { 
-            color: #fff; 
-            font-weight: bold; 
-            font-size: 14px; 
-            text-align: right;
-            flex-shrink: 0; /* Не сжимать блок цены */
-        }
-        
+        .detail-item-price { color: #fff; font-weight: bold; font-size: 14px; text-align: right; flex-shrink: 0; }
         .detail-item-imgs { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; }
         .detail-item-img { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border-color); }
         
@@ -476,6 +451,9 @@
             </div>
             <h4 class="text-sm font-bold text-[var(--text-secondary)] uppercase mb-3 px-2">Список товаров</h4>
             <div id="detailItemsList" class="history-detail-scroll"></div>
+            
+            <!-- КНОПКИ ОПЛАТЫ ВНУТРИ ЗАКАЗА -->
+            <div id="historyActionBtns" class="mt-4 flex flex-col gap-3"></div>
         </div>
     </div>
 
@@ -510,83 +488,38 @@
         let deliveryType = 'grey'; 
         let historyDataCache = [];
 
-        // --- WRAPPERS ДЛЯ ХРАНИЛИЩА (CloudStorage + fallback в localStorage) ---
+        // --- WRAPPERS ДЛЯ ХРАНИЛИЩА (CloudStorage + fallback) ---
         const hasCloudStorage = tg && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function';
 
         const cloudStorage = {
             getItem: (key) => new Promise((resolve) => {
                 if (!hasCloudStorage) {
-                    try {
-                        resolve(localStorage.getItem(key));
-                    } catch (e) {
-                        console.error('localStorage getItem error', e);
-                        resolve(null);
-                    }
+                    try { resolve(localStorage.getItem(key)); } catch (e) { resolve(null); }
                     return;
                 }
                 tg.CloudStorage.getItem(key, (err, value) => {
-                    if (err) {
-                        console.error('CloudStorage getItem error', key, err);
-                        try {
-                            resolve(localStorage.getItem(key));
-                        } catch (e) {
-                            resolve(null);
-                        }
-                    } else {
-                        resolve(value);
-                    }
+                    if (err) { try { resolve(localStorage.getItem(key)); } catch (e) { resolve(null); } } 
+                    else resolve(value);
                 });
             }),
             setItem: (key, value) => new Promise((resolve, reject) => {
                 if (!hasCloudStorage) {
-                    try {
-                        localStorage.setItem(key, value);
-                        resolve(true);
-                    } catch (e) {
-                        console.error('localStorage setItem error', e);
-                        reject(e);
-                    }
+                    try { localStorage.setItem(key, value); resolve(true); } catch (e) { reject(e); }
                     return;
                 }
                 tg.CloudStorage.setItem(key, value, (err, stored) => {
-                    if (err) {
-                        console.error('CloudStorage setItem error', key, err);
-                        try {
-                            localStorage.setItem(key, value);
-                        } catch (e) {}
-                        reject(err);
-                    } else {
-                        try {
-                            localStorage.setItem(key, value);
-                        } catch (e) {}
-                        resolve(stored);
-                    }
+                    if (err) { try { localStorage.setItem(key, value); } catch (e) {} reject(err); } 
+                    else { try { localStorage.setItem(key, value); } catch (e) {} resolve(stored); }
                 });
             }),
             removeItem: (key) => new Promise((resolve, reject) => {
                 if (!hasCloudStorage) {
-                    try {
-                        localStorage.removeItem(key);
-                        resolve(true);
-                    } catch (e) {
-                        console.error('localStorage removeItem error', e);
-                        reject(e);
-                    }
+                    try { localStorage.removeItem(key); resolve(true); } catch (e) { reject(e); }
                     return;
                 }
                 tg.CloudStorage.removeItem(key, (err, deleted) => {
-                    if (err) {
-                        console.error('CloudStorage removeItem error', key, err);
-                        try {
-                            localStorage.removeItem(key);
-                        } catch (e) {}
-                        reject(err);
-                    } else {
-                        try {
-                            localStorage.removeItem(key);
-                        } catch (e) {}
-                        resolve(deleted);
-                    }
+                    if (err) { try { localStorage.removeItem(key); } catch (e) {} reject(err); } 
+                    else { try { localStorage.removeItem(key); } catch (e) {} resolve(deleted); }
                 });
             })
         };
@@ -602,14 +535,29 @@
             try {
                 let storageObj = JSON.parse(JSON.stringify(dataObj));
                 
-                // Оптимизация размера записи (Telegram Cloud Storage имеет лимиты)
-                if (JSON.stringify(storageObj).length > 3500) {
+                // УМНАЯ ОПТИМИЗАЦИЯ ДАННЫХ ДЛЯ ИСТОРИИ:
+                // Если заказ очень большой (например, 11 товаров с фото), CloudStorage может отказаться его сохранять.
+                let size = new Blob([JSON.stringify(storageObj)]).size;
+                
+                if (size > 3500) {
                      if(storageObj.itemsData) {
                          storageObj.itemsData = storageObj.itemsData.map(i => {
                              const { imgUrls, ...rest } = i; 
-                             return rest; 
+                             let shortLink = rest.link || rest.comment || '';
+                             // Обрезаем только доп. параметры ссылки, чтобы экономить место
+                             if(shortLink.length > 200 && shortLink.includes('http')) {
+                                 shortLink = shortLink.split('?')[0].substring(0, 200) + '...';
+                             }
+                             return { ...rest, link: shortLink, comment: shortLink }; 
                          });
                      }
+                     size = new Blob([JSON.stringify(storageObj)]).size;
+                }
+                
+                // Экстренное обрезание, если все еще не влезает
+                if (size > 3900 && storageObj.itemsData && storageObj.itemsData.length > 5) {
+                    storageObj.itemsData = storageObj.itemsData.slice(0, 5);
+                    storageObj.itemsData.push({ link: '... и другие позиции', price: 0 });
                 }
 
                 const id = Date.now().toString();
@@ -626,21 +574,10 @@
                 }
                 
                 await cloudStorage.setItem('nws_history_idx', JSON.stringify(index));
-
-                // Параллельно поддерживаем старый формат 'nws_history' для совместимости
-                let legacy = [];
-                const legacyStr = await cloudStorage.getItem('nws_history');
-                if (legacyStr) {
-                    try { legacy = JSON.parse(legacyStr) || []; } catch (e) { legacy = []; }
-                }
-                legacy.unshift(storageObj);
-                if (legacy.length > 20) legacy = legacy.slice(0, 20);
-                await cloudStorage.setItem('nws_history', JSON.stringify(legacy));
             } catch (e) { console.error("History save error:", e); }
         }
 
         async function loadFullHistory() {
-            // Новый формат с индексом
             const index = await getHistoryIndex();
             if (index && index.length > 0) {
                 const historyItems = [];
@@ -652,16 +589,7 @@
                 }
                 if (historyItems.length > 0) return historyItems;
             }
-
-            // Fallback: старый массив 'nws_history'
-            const legacyStr = await cloudStorage.getItem('nws_history');
-            if (!legacyStr) return [];
-            try {
-                const arr = JSON.parse(legacyStr);
-                return Array.isArray(arr) ? arr : [];
-            } catch (e) {
-                return [];
-            }
+            return [];
         }
 
         // --- UI LOGIC ---
@@ -677,7 +605,6 @@
         function openOrderHelp() {
             try {
                 if (tg && typeof tg.openLink === 'function') {
-                    // Просим Telegram открыть Instant View / Telegraph c сохранением темы
                     tg.openLink(ORDER_HELP_URL, { try_instant_view: true });
                 } else {
                     window.open(ORDER_HELP_URL, '_blank');
@@ -689,9 +616,16 @@
 
         function formatLinks(text) {
             if(!text) return '';
-            // Regex matches http/https URLs. 
-            // Replaces them with span class="link-url"
             return text.replace(/(https?:\/\/[^\s]+)/g, '<span class="link-url">$1</span>');
+        }
+
+        function triggerPayment(type, date) {
+            tg.sendData(JSON.stringify({
+                type: 'payment_action',
+                action: type,
+                orderDate: date
+            }));
+            tg.close();
         }
 
         function openHistoryDetails(index) {
@@ -701,10 +635,9 @@
             document.getElementById('detailTitle').innerText = item.title;
             document.getElementById('detailDate').innerText = item.date;
             document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
-            // Simple display of price in header, strip HTML if saved as HTML
             document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0].trim() : '0 ₽';
-            document.getElementById('detailOrderStatus').innerText = item.orderStatus || 'Не указан';
-            document.getElementById('detailDeliveryStatus').innerText = item.deliveryStatus || 'Не указана';
+            document.getElementById('detailOrderStatus').innerText = item.orderStatus || 'Заказ: не оплачен';
+            document.getElementById('detailDeliveryStatus').innerText = item.deliveryStatus || 'Доставка: не выставлена';
 
             const listContainer = document.getElementById('detailItemsList');
             listContainer.innerHTML = '';
@@ -719,10 +652,8 @@
                     }
                     
                     const rub = Math.ceil((parseFloat(prod.price)+30)*((item.delivery && item.delivery.includes('Белая') ? 1.1 : 1.05)) * 13);
-                    // Price on two lines
                     const priceHtml = prod.price ? `<div class="detail-item-price"><div>${formatPrice(rub)} ₽</div><div class="text-[var(--text-secondary)] text-xs font-normal">(${prod.price} ¥)</div></div>` : '';
                     
-                    // Format text to highlight links
                     const rawText = prod.link || prod.comment || 'Товар';
                     const formattedText = formatLinks(rawText);
 
@@ -740,6 +671,31 @@
             } else {
                 listContainer.innerHTML = '<div class="text-center text-gray-500 py-4">Нет списка товаров</div>';
             }
+
+            // ВСТАВЛЯЕМ КНОПКИ ОПЛАТЫ
+            const actionBtns = document.getElementById('historyActionBtns');
+            actionBtns.innerHTML = '';
+            
+            let btnsHtml = '';
+            const orderState = (item.orderStatus || 'не оплачен').toLowerCase();
+            const deliveryState = (item.deliveryStatus || 'не выставлена').toLowerCase();
+            
+            // Если заказ не оплачен, показываем кнопку Оплатить заказ
+            if (orderState.includes('не оплачен')) {
+                btnsHtml += `<button class="btn-main w-full py-3 shadow-lg" onclick="triggerPayment('order', '${item.date}')"><i class="fas fa-credit-card mr-2"></i> Оплатить заказ</button>`;
+            }
+            // Если выставлен счет за доставку или она не оплачена
+            if (deliveryState.includes('выставлен') || deliveryState.includes('не оплачена')) {
+                btnsHtml += `<button class="btn-main w-full py-3 shadow-lg" style="background: linear-gradient(135deg, #10b981 0%, #15803d 100%); border-color: #10b981; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);" onclick="triggerPayment('delivery', '${item.date}')"><i class="fas fa-box mr-2"></i> Оплатить доставку</button>`;
+            }
+            
+            // Заглушки, если нет четкого статуса, чтобы клиент всегда мог отправить запрос
+            if (!btnsHtml) {
+                btnsHtml += `<button class="btn-secondary w-full py-3 mb-2" onclick="triggerPayment('request_order', '${item.date}')">Запросить счет на оплату</button>`;
+            }
+
+            actionBtns.innerHTML = btnsHtml;
+
             document.getElementById('historyDetailSheet').classList.add('open');
         }
 
@@ -809,10 +765,10 @@
             event.currentTarget.classList.add('selected');
             if (type === 'custom') {
                 triggerText.innerText = "Свой размер";
-                descEl.classList.add('hidden'); // Hide for custom
+                descEl.classList.add('hidden'); 
                 customDiv.classList.remove('hidden');
             } else {
-                triggerText.innerText = type;
+                triggerText.innerText = `Коробка ${type}`;
                 descEl.classList.remove('hidden'); descEl.innerText = desc;
                 customDiv.classList.add('hidden');
                 const sizes = {'MINI': [23,17,13], 'SMALL': [36,26,14], 'LARGE': [40,29,16], 'Y-08': [37,29,28]};
@@ -928,9 +884,10 @@
                         totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
                     }
                 });
+                
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
-                // Save price as stacked HTML
                 const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
+                
                 const historyObj = {
                     title: 'Заказ на выкуп',
                     date: new Date().toLocaleString('ru-RU'),
@@ -941,9 +898,32 @@
                     orderStatus: 'Заказ: не оплачен',
                     deliveryStatus: 'Доставка: не выставлена'
                 };
+                
                 await addToHistoryV2(historyObj);
-                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
-                tg.sendData(JSON.stringify(data));
+
+                // ОПТИМИЗАЦИЯ ДАННЫХ ДЛЯ БОТА, ЧТОБЫ СООБЩЕНИЕ ТОЧНО ДОШЛО (Лимит 4096 байт)
+                let payload = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
+                let json = JSON.stringify(payload);
+                let jsonSize = new Blob([json]).size;
+                
+                if (jsonSize > 3800) {
+                    // Убираем длинные хвосты у ссылок для отправки боту
+                    payload.items = payload.items.map(i => {
+                        let short = i.link;
+                        if (short && short.length > 150) short = short.split('?')[0].substring(0, 150) + '...';
+                        return { ...i, link: short, imgUrls: i.imgUrls.slice(0, 1) }; // Оставляем максимум 1 фото
+                    });
+                    json = JSON.stringify(payload);
+                    jsonSize = new Blob([json]).size;
+                }
+                
+                if (jsonSize > 3800) {
+                    // Если всё равно не влезает — удаляем фото полностью из отправки боту
+                    payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
+                    json = JSON.stringify(payload);
+                }
+
+                tg.sendData(json);
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -1040,11 +1020,23 @@
 
                 let payload = { type: 'search', items: searchItems };
                 let json = JSON.stringify(payload);
-                if (json.length > 3500) {
+                let jsonSize = new Blob([json]).size;
+                
+                if (jsonSize > 3800) {
+                    payload.items = payload.items.map(i => {
+                        let short = i.comment;
+                        if(short && short.length > 200) short = short.substring(0, 200) + '...';
+                        return { ...i, comment: short, imgUrls: i.imgUrls.slice(0, 1) };
+                    });
+                    json = JSON.stringify(payload);
+                    jsonSize = new Blob([json]).size;
+                }
+                if (jsonSize > 3800) {
                     payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
+                    json = JSON.stringify(payload);
                 }
 
-                tg.sendData(JSON.stringify(payload));
+                tg.sendData(json);
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -1070,8 +1062,8 @@
                 const deliveryStatusText = item.deliveryStatus || '';
                 const statusHtml = (orderStatusText || deliveryStatusText)
                     ? `<div class="history-status">
-                            ${orderStatusText ? `<span class="${orderStatusText.toLowerCase().includes('оплачен') ? 'status-paid' : 'status-unpaid'}">${orderStatusText}</span>` : ''}
-                            ${deliveryStatusText ? `<span class="${deliveryStatusText.toLowerCase().includes('оплачена') ? 'status-paid' : 'status-unpaid'}">${deliveryStatusText}</span>` : ''}
+                            ${orderStatusText ? `<span class="${orderStatusText.toLowerCase().includes('оплачен') && !orderStatusText.toLowerCase().includes('не оплачен') ? 'status-paid' : 'status-unpaid'}">${orderStatusText}</span>` : ''}
+                            ${deliveryStatusText ? `<span class="${deliveryStatusText.toLowerCase().includes('оплачена') && !deliveryStatusText.toLowerCase().includes('не оплачена') ? 'status-paid' : 'status-unpaid'}">${deliveryStatusText}</span>` : ''}
                        </div>`
                     : '';
 
