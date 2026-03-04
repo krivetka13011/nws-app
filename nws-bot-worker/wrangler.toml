@@ -1,0 +1,8 @@
+name = "nwsnumbot"
+main = "index.js"
+compatibility_date = "2026-03-02"
+
+[vars]
+MANAGER_ID = 1159166497
+APP_URL = "https://krivetka13011.github.io/nws-app/"
+WEBHOOK_SECRET = "nws-secret-123"  # можно поменять на любое слово
