@@ -170,11 +170,12 @@ async function handleCalc(env, chatId, data) {
 
 async function handleOrder(env, chatId, user, data) {
   const items = Array.isArray(data.items) ? data.items : [];
+  // Используем resRub из WebApp (расчёт с доставкой и комиссией), иначе fallback
+  const totalRub = items.reduce((sum, it) => sum + (Number(it.resRub) || 0), 0);
   const totalYuan = items.reduce((sum, it) => {
-    const v = Number(it.resYuan || 0);
+    const v = Number(it.resYuan ?? it.price ?? 0);
     return sum + (Number.isNaN(v) ? 0 : v);
   }, 0);
-  const totalRub = Math.ceil(totalYuan * 13);
 
   const username = user?.username ? `@${user.username}` : `ID: ${user?.id}`;
 
@@ -195,7 +196,8 @@ async function handleOrder(env, chatId, user, data) {
   for (let idx = 0; idx < items.length; idx++) {
     const item = items[idx];
     const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
-    const resRub = Math.ceil(resYuan * 13);
+    // resRub из WebApp (с доставкой 30¥ и комиссией 5%/10%), иначе fallback: price * 13
+    const resRub = Number(item.resRub) || Math.ceil(resYuan * 13);
     const link = item.link || 'Не указана';
 
     const textMsg =

@@ -897,7 +897,7 @@
                 </div>
             `;
             document.getElementById('orderItemsList').insertAdjacentHTML('beforeend', html);
-            orderItems.push({ id, link: '', price: 0, resYuan: 0, imgUrls: [] });
+            orderItems.push({ id, link: '', price: 0, resYuan: 0, resRub: 0, imgUrls: [] });
             updateDeleteButtons('order'); updateItemNumbers('order');
         }
 
@@ -908,13 +908,13 @@
                 const val = parseFloat(value) || 0; item.price = val;
                 const resBox = document.getElementById(`res-rub-${id}`);
                 if (val === 0) {
-                     resBox.innerText = `0 ₽`; resBox.classList.remove('active-price'); item.resYuan = 0;
+                     resBox.innerText = `0 ₽`; resBox.classList.remove('active-price'); item.resYuan = 0; item.resRub = 0;
                 } else {
                     const commission = deliveryType === 'white' ? 0.10 : 0.05;
                     const priceWithShipping = val + 30;
                     const commissionSum = priceWithShipping * commission;
                     const rub = Math.ceil((priceWithShipping + commissionSum) * RATE_MULTIPLIER);
-                    item.resYuan = val; resBox.innerText = `${formatPrice(rub)} ₽`; resBox.classList.add('active-price');
+                    item.resYuan = val; item.resRub = rub; resBox.innerText = `${formatPrice(rub)} ₽`; resBox.classList.add('active-price');
                 }
             } else { item[field] = value; }
         }
@@ -968,6 +968,7 @@
                         link: i.link,
                         price: i.price,
                         resYuan: i.resYuan,
+                        resRub: i.resRub,
                         imgUrls: (i.imgUrls || []).slice(0, 2)
                     }));
                     data.items = trimmed;
