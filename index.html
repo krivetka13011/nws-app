@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -81,6 +81,11 @@
             justify-content: center;
         }
         .btn-secondary:active { background-color: rgba(59, 130, 246, 0.2); }
+
+        /* Явная поддержка utility-класса hidden (на случай, если Tailwind не применился) */
+        .hidden {
+            display: none !important;
+        }
 
         /* Inputs */
         input, textarea {
@@ -1100,9 +1105,12 @@
                 container.insertAdjacentHTML('beforeend', html);
             });
         }
-        
+
+        // Инициализация интерфейса после загрузки скрипта
         document.body.style.backgroundColor = "var(--bg-color)";
         document.getElementById('selectedBoxName').innerText = "Выберите упаковку";
+        // Гарантируем, что в action-bar активна только кнопка текущего таба
+        switchTab(currentTab);
     </script>
 </body>
 </html>
