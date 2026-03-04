@@ -961,7 +961,23 @@
                 };
                 await addToHistoryV2(historyObj);
                 const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
-                tg.sendData(JSON.stringify(data));
+                let json = JSON.stringify(data);
+                // Telegram sendData limit: 4096 bytes
+                if (json.length > 4000) {
+                    const trimmed = data.items.map(i => ({
+                        link: i.link,
+                        price: i.price,
+                        resYuan: i.resYuan,
+                        imgUrls: (i.imgUrls || []).slice(0, 2)
+                    }));
+                    data.items = trimmed;
+                    json = JSON.stringify(data);
+                    if (json.length > 4000) {
+                        data.items = data.items.map(i => ({ ...i, imgUrls: [] }));
+                        json = JSON.stringify(data);
+                    }
+                }
+                tg.sendData(json);
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
