@@ -10,5 +10,7 @@ id = "c638f4e8ab67463c9882857c8b93c063"
 MANAGER_ID = 1159166497
 APP_URL = "https://krivetka13011.github.io/nws-app/"
 WEBHOOK_SECRET = "nws-secret-123"  # можно поменять на любое слово
-# GROUP_ID — добавьте в Cloudflare Dashboard (Variables) когда настроите группу.
-# См. SETUP_CRM.md
+# ID закрытой группы с темами (частная — только для менеджеров)
+GROUP_ID = "-5175715343"
+# ID темы General (1 = стандартная тема для рассылок всем пользователям)
+GENERAL_TOPIC_ID = "1"

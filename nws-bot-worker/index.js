@@ -85,6 +85,13 @@ function getGroupId(env) {
   return Number.isNaN(n) ? null : n;
 }
 
+function getGeneralTopicId(env) {
+  const t = env.GENERAL_TOPIC_ID;
+  if (!t || t === '') return 1;
+  const n = Number(t);
+  return Number.isNaN(n) ? 1 : n;
+}
+
 function clientName(from) {
   if (!from) return 'Клиент';
   const parts = [];
@@ -137,6 +144,71 @@ async function sendToTopic(env, topicId, method, payload) {
   });
 }
 
+async function addToBroadcastList(env, chatId) {
+  if (!env.CLIENTS) return;
+  const key = 'broadcast_users';
+  let list = [];
+  try {
+    const stored = await env.CLIENTS.get(key);
+    if (stored) list = JSON.parse(stored);
+  } catch (_) {}
+  if (!Array.isArray(list)) list = [];
+  const id = Number(chatId);
+  if (!list.includes(id)) {
+    list.push(id);
+    await env.CLIENTS.put(key, JSON.stringify(list));
+  }
+}
+
+async function broadcastToAllUsers(env, msg) {
+  if (!env.CLIENTS) return;
+  let list = [];
+  try {
+    const stored = await env.CLIENTS.get('broadcast_users');
+    if (stored) list = JSON.parse(stored);
+  } catch (_) {}
+  if (!Array.isArray(list) || list.length === 0) return;
+
+  const text = msg.text || msg.caption || '';
+  let toRemove = [];
+
+  for (const chatId of list) {
+    let res;
+    if (msg.photo && msg.photo.length) {
+      const photo = msg.photo[msg.photo.length - 1];
+      res = await callTelegram(env, 'sendPhoto', {
+        chat_id: chatId,
+        photo: photo.file_id,
+        caption: text || undefined
+      });
+    } else if (msg.text) {
+      res = await callTelegram(env, 'sendMessage', {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML'
+      });
+    } else if (msg.document || msg.voice || msg.video) {
+      res = await callTelegram(env, 'copyMessage', {
+        chat_id: chatId,
+        from_chat_id: msg.chat.id,
+        message_id: msg.message_id
+      });
+    }
+    if (res && !res.ok) {
+      const d = (res.description || '').toLowerCase();
+      if (d.includes('blocked') || d.includes('deactivated') || d.includes('chat not found')) {
+        toRemove.push(chatId);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  if (toRemove.length) {
+    list = list.filter((id) => !toRemove.includes(id));
+    await env.CLIENTS.put('broadcast_users', JSON.stringify(list));
+  }
+}
+
 // ===== Update router =====
 
 async function handleUpdate(update, env) {
@@ -148,8 +220,17 @@ async function handleUpdate(update, env) {
   const isGroupTopic = msg.chat.type === 'supergroup' && msg.message_thread_id && msg.is_topic_message;
   const groupId = getGroupId(env);
 
-  // Сообщение из группы (ответ менеджера в теме) → переслать клиенту
+  // Сообщение из группы
   if (isGroupTopic && groupId && Number(msg.chat.id) === Number(groupId)) {
+    const generalTopicId = getGeneralTopicId(env);
+
+    // General: рассылка всем пользователям бота
+    if (msg.message_thread_id === generalTopicId && msg.from && !msg.from.is_bot) {
+      await broadcastToAllUsers(env, msg);
+      return;
+    }
+
+    // Тема клиента: ответ менеджера → переслать клиенту
     const clientId = await getClientForTopic(env, msg.message_thread_id);
     if (clientId && msg.from && !msg.from.is_bot) {
       await forwardManagerReplyToClient(env, msg, clientId);
@@ -319,6 +400,8 @@ async function handleStart(env, chatId, from) {
       parse_mode: 'HTML'
     });
   }
+
+  await addToBroadcastList(env, chatId);
 }
 
 async function handleCalc(env, chatId, data) {
