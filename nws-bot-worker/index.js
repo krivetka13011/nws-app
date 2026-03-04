@@ -214,21 +214,19 @@ async function handleOrder(env, chatId, user, data) {
       `  💰  Цена: ${item.price ?? '—'} ¥\n` +
       `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
 
-    // 1. Всегда отправляем текст с информацией о товаре
-    await sendWithRetry(env, 'sendMessage', {
-      chat_id: Number(env.MANAGER_ID),
-      text: textMsg,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true
-    });
-
-    // 2. Отправляем фото (если есть)
     const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
+
     if (imgUrls.length) {
+      // Фото + текст одним сообщением (caption на первом фото)
       const batchSize = 9;
       for (let start = 0; start < imgUrls.length; start += batchSize) {
         const batch = imgUrls.slice(start, start + batchSize);
-        const media = batch.map((url) => ({ type: 'photo', media: url }));
+        const media = batch.map((url, i) => {
+          if (start === 0 && i === 0) {
+            return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
+          }
+          return { type: 'photo', media: url };
+        });
 
         try {
           await sendWithRetry(env, 'sendMediaGroup', {
@@ -237,6 +235,12 @@ async function handleOrder(env, chatId, user, data) {
           });
         } catch (err) {
           console.error('sendMediaGroup error (order):', err);
+          await sendWithRetry(env, 'sendMessage', {
+            chat_id: Number(env.MANAGER_ID),
+            text: textMsg,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+          });
           for (const url of batch) {
             try {
               await sendWithRetry(env, 'sendPhoto', {
@@ -244,16 +248,22 @@ async function handleOrder(env, chatId, user, data) {
                 photo: url
               });
             } catch (photoErr) {
-              console.error('sendPhoto error (order):', photoErr);
               await callTelegram(env, 'sendMessage', {
                 chat_id: Number(env.MANAGER_ID),
-                text: `📸 <a href="${url}">Фото товара №${idx + 1}</a>`,
+                text: `📸 <a href="${url}">Фото</a>`,
                 parse_mode: 'HTML'
               });
             }
           }
         }
       }
+    } else {
+      await sendWithRetry(env, 'sendMessage', {
+        chat_id: Number(env.MANAGER_ID),
+        text: `${textMsg}\n  📸  Фото: Нет`,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      });
     }
   }
 
@@ -295,20 +305,18 @@ async function handleSearch(env, chatId, user, data) {
       `  📍  <b>ПОЗИЦИЯ №${idx + 1}</b>\n` +
       `  💬  ${item.comment || 'Без комментария'}`;
 
-    // 1. Всегда отправляем текст
-    await sendWithRetry(env, 'sendMessage', {
-      chat_id: Number(env.MANAGER_ID),
-      text: textMsg,
-      parse_mode: 'HTML'
-    });
-
-    // 2. Отправляем фото (если есть)
     const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
+
     if (imgUrls.length) {
       const batchSize = 9;
       for (let start = 0; start < imgUrls.length; start += batchSize) {
         const batch = imgUrls.slice(start, start + batchSize);
-        const media = batch.map((url) => ({ type: 'photo', media: url }));
+        const media = batch.map((url, i) => {
+          if (start === 0 && i === 0) {
+            return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
+          }
+          return { type: 'photo', media: url };
+        });
 
         try {
           await sendWithRetry(env, 'sendMediaGroup', {
@@ -317,6 +325,11 @@ async function handleSearch(env, chatId, user, data) {
           });
         } catch (err) {
           console.error('sendMediaGroup error (search):', err);
+          await sendWithRetry(env, 'sendMessage', {
+            chat_id: Number(env.MANAGER_ID),
+            text: textMsg,
+            parse_mode: 'HTML'
+          });
           for (const url of batch) {
             try {
               await sendWithRetry(env, 'sendPhoto', {
@@ -326,13 +339,19 @@ async function handleSearch(env, chatId, user, data) {
             } catch (photoErr) {
               await callTelegram(env, 'sendMessage', {
                 chat_id: Number(env.MANAGER_ID),
-                text: `📸 <a href="${url}">Фото позиции №${idx + 1}</a>`,
+                text: `📸 <a href="${url}">Фото</a>`,
                 parse_mode: 'HTML'
               });
             }
           }
         }
       }
+    } else {
+      await sendWithRetry(env, 'sendMessage', {
+        chat_id: Number(env.MANAGER_ID),
+        text: `${textMsg}\n  📸  Фото: Нет`,
+        parse_mode: 'HTML'
+      });
     }
   }
 
