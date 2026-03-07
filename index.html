@@ -436,7 +436,10 @@
     <div id="tab-history" class="tab-content">
         <div class="flex items-center justify-between mb-6 px-2">
             <h2 class="text-3xl font-bold text-white">История</h2>
-            <button onclick="clearHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Очистить</button>
+            <div class="flex gap-2">
+                <button onclick="renderHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition" title="Обновить"><i class="fas fa-sync-alt"></i></button>
+                <button onclick="clearHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Очистить</button>
+            </div>
         </div>
         <div id="historyList" class="space-y-4"></div>
         <div class="scroll-spacer"></div>
@@ -520,6 +523,7 @@
         let searchItems = [];
         let deliveryType = 'grey'; 
         let historyDataCache = [];
+        let lastOrdersCache = []; // кэш заказов для быстрого отображения статусов
 
         // --- HISTORY LOGIC (Cloudflare KV + localStorage fallback) ---
         const HISTORY_LOCAL_KEY = 'nws_history';
@@ -635,16 +639,10 @@
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
             if (item.title === 'Заказ на выкуп') {
-                let status = item.orderNumber ? await fetchOrderStatus(null, item.orderNumber) : null;
-                if (!status && item.orderId) status = await fetchOrderStatus(item.orderId);
-                if (!status) {
-                    const orders = await fetchOrdersForClient();
-                    const totalRub = parseTotalRubFromItem(item);
-                    if (totalRub) {
-                        status = matchOrderByTotalRub(orders, totalRub);
-                        if (status) item.orderNumber = status.orderNumber;
-                    }
-                }
+                const orders = await fetchOrdersForClient();
+                lastOrdersCache = orders;
+                const status = findOrderStatus(orders, item);
+                if (status && !item.orderNumber) item.orderNumber = status.orderNumber;
                 const formatted = formatOrderStatus(status);
                 orderStatusText = formatted.order;
                 deliveryStatusText = formatted.delivery;
@@ -1077,6 +1075,21 @@
             return orders.find(o => o.totalRub === rub) || orders.find(o => Math.abs((o.totalRub || 0) - rub) < 10);
         }
 
+        function findOrderStatus(allOrders, item) {
+            if (!allOrders || !allOrders.length) return null;
+            if (item.orderNumber) {
+                const o = allOrders.find(x => Number(x.orderNumber) === Number(item.orderNumber));
+                if (o) return o;
+            }
+            if (item.orderId) {
+                const o = allOrders.find(x => x.orderId === item.orderId);
+                if (o) return o;
+            }
+            const totalRub = parseTotalRubFromItem(item);
+            if (totalRub) return matchOrderByTotalRub(allOrders, totalRub);
+            return null;
+        }
+
         function formatOrderStatus(status) {
             if (!status) return { order: '🔴 Заказ: Не оплачен', delivery: '🔴 Доставка: Счёт не выставлен' };
             const order = status.orderPaid ? '🟢 Заказ: Оплачен' : '🔴 Заказ: Не оплачен';
@@ -1093,35 +1106,26 @@
             const container = document.getElementById('historyList');
             container.innerHTML = '<div style="text-align:center; margin-top:20px; color:#666;">Загрузка...</div>';
             
-            const history = await loadFullHistory();
-            historyDataCache = history; 
+            const [history, allOrders] = await Promise.all([
+                loadFullHistory(),
+                fetchOrdersForClient()
+            ]);
+            historyDataCache = history;
+            lastOrdersCache = allOrders;
             container.innerHTML = '';
             
             if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
             
-            const hasOrders = history.some(h => h.title === 'Заказ на выкуп');
-            const allOrders = hasOrders ? await fetchOrdersForClient() : [];
             let historyUpdated = false;
             for (let i = 0; i < history.length; i++) {
                 const item = history[i];
                 let orderStatusText = item.orderStatus || '';
                 let deliveryStatusText = item.deliveryStatus || '';
                 if (item.title === 'Заказ на выкуп') {
-                    let status = null;
-                    if (item.orderNumber) {
-                        status = await fetchOrderStatus(null, item.orderNumber);
-                    }
-                    if (!status && item.orderId) {
-                        status = await fetchOrderStatus(item.orderId);
-                    }
-                    const totalRub = parseTotalRubFromItem(item);
-                    if (!status && allOrders.length > 0 && totalRub) {
-                        const matched = matchOrderByTotalRub(allOrders, totalRub);
-                        if (matched) {
-                            status = matched;
-                            item.orderNumber = matched.orderNumber;
-                            historyUpdated = true;
-                        }
+                    const status = findOrderStatus(allOrders, item);
+                    if (status && !item.orderNumber) {
+                        item.orderNumber = status.orderNumber;
+                        historyUpdated = true;
                     }
                     const formatted = formatOrderStatus(status);
                     orderStatusText = formatted.order;
