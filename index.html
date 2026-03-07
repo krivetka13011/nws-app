@@ -511,8 +511,9 @@
         tg.setBackgroundColor('#050505');
         const RATE_MULTIPLIER = 13; 
         const ORDER_HELP_URL = 'https://telegra.ph/Kak-i-zachem-sozdavat-Kitajskij-nomer-09-02'; 
-        const ORDER_STATUS_URL = 'https://nwsnumbot.krivetkagames.workers.dev/order-status';
-        const ORDERS_URL = 'https://nwsnumbot.krivetkagames.workers.dev/orders';
+        const WORKER_URL = 'https://nwsnumbot.krivetkagames.workers.dev';
+        const ORDER_STATUS_URL = `${WORKER_URL}/order-status`;
+        const ORDERS_URL = `${WORKER_URL}/orders`;
         
         let currentTab = 'calc';
         let orderItems = [];
@@ -520,156 +521,39 @@
         let deliveryType = 'grey'; 
         let historyDataCache = [];
 
-        // --- WRAPPERS ДЛЯ ХРАНИЛИЩА (CloudStorage + fallback в localStorage) ---
-        const hasCloudStorage = tg && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function';
-
-        const cloudStorage = {
-            getItem: (key) => new Promise((resolve) => {
-                if (!hasCloudStorage) {
-                    try {
-                        resolve(localStorage.getItem(key));
-                    } catch (e) {
-                        console.error('localStorage getItem error', e);
-                        resolve(null);
-                    }
-                    return;
-                }
-                tg.CloudStorage.getItem(key, (err, value) => {
-                    if (err) {
-                        console.error('CloudStorage getItem error', key, err);
-                        try {
-                            resolve(localStorage.getItem(key));
-                        } catch (e) {
-                            resolve(null);
-                        }
-                    } else {
-                        resolve(value);
-                    }
-                });
-            }),
-            setItem: (key, value) => new Promise((resolve, reject) => {
-                if (!hasCloudStorage) {
-                    try {
-                        localStorage.setItem(key, value);
-                        resolve(true);
-                    } catch (e) {
-                        console.error('localStorage setItem error', e);
-                        reject(e);
-                    }
-                    return;
-                }
-                tg.CloudStorage.setItem(key, value, (err, stored) => {
-                    if (err) {
-                        console.error('CloudStorage setItem error', key, err);
-                        try {
-                            localStorage.setItem(key, value);
-                        } catch (e) {}
-                        reject(err);
-                    } else {
-                        try {
-                            localStorage.setItem(key, value);
-                        } catch (e) {}
-                        resolve(stored);
-                    }
-                });
-            }),
-            removeItem: (key) => new Promise((resolve, reject) => {
-                if (!hasCloudStorage) {
-                    try {
-                        localStorage.removeItem(key);
-                        resolve(true);
-                    } catch (e) {
-                        console.error('localStorage removeItem error', e);
-                        reject(e);
-                    }
-                    return;
-                }
-                tg.CloudStorage.removeItem(key, (err, deleted) => {
-                    if (err) {
-                        console.error('CloudStorage removeItem error', key, err);
-                        try {
-                            localStorage.removeItem(key);
-                        } catch (e) {}
-                        reject(err);
-                    } else {
-                        try {
-                            localStorage.removeItem(key);
-                        } catch (e) {}
-                        resolve(deleted);
-                    }
-                });
-            })
-        };
-
-        // --- HISTORY LOGIC ---
-        async function getHistoryIndex() {
-            const indexStr = await cloudStorage.getItem('nws_history_idx');
-            if (!indexStr) return [];
-            try { return JSON.parse(indexStr); } catch (e) { return []; }
-        }
-
+        // --- HISTORY LOGIC (Cloudflare KV) ---
         async function addToHistoryV2(dataObj) {
+            const userId = tg.initDataUnsafe?.user?.id;
+            if (!userId) {
+                console.error('History save: userId not available');
+                return;
+            }
             try {
                 let storageObj = JSON.parse(JSON.stringify(dataObj));
-                
-                // Оптимизация размера записи (Telegram Cloud Storage имеет лимиты)
-                if (JSON.stringify(storageObj).length > 3500) {
-                     if(storageObj.itemsData) {
-                         storageObj.itemsData = storageObj.itemsData.map(i => {
-                             const { imgUrls, ...rest } = i; 
-                             return rest; 
-                         });
-                     }
+                if (JSON.stringify(storageObj).length > 3500 && storageObj.itemsData) {
+                    storageObj.itemsData = storageObj.itemsData.map(i => {
+                        const { imgUrls, ...rest } = i;
+                        return rest;
+                    });
                 }
-
-                const id = Date.now().toString();
-                const key = `nws_ord_${id}`;
-                const index = await getHistoryIndex();
-
-                await cloudStorage.setItem(key, JSON.stringify(storageObj));
-                index.unshift(key);
-                
-                if (index.length > 20) {
-                    const keysToRemove = index.slice(20);
-                    for (const k of keysToRemove) { await cloudStorage.removeItem(k); }
-                    index.length = 20; 
-                }
-                
-                await cloudStorage.setItem('nws_history_idx', JSON.stringify(index));
-
-                // Параллельно поддерживаем старый формат 'nws_history' для совместимости
-                let legacy = [];
-                const legacyStr = await cloudStorage.getItem('nws_history');
-                if (legacyStr) {
-                    try { legacy = JSON.parse(legacyStr) || []; } catch (e) { legacy = []; }
-                }
-                legacy.unshift(storageObj);
-                if (legacy.length > 20) legacy = legacy.slice(0, 20);
-                await cloudStorage.setItem('nws_history', JSON.stringify(legacy));
-            } catch (e) { console.error("History save error:", e); }
+                const res = await fetch(`${WORKER_URL}/api/history`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: String(userId), orderData: storageObj })
+                });
+                if (!res.ok) throw new Error('History save failed');
+            } catch (e) { console.error('History save error:', e); }
         }
 
         async function loadFullHistory() {
-            // Новый формат с индексом
-            const index = await getHistoryIndex();
-            if (index && index.length > 0) {
-                const historyItems = [];
-                for (const key of index) {
-                    const res = await cloudStorage.getItem(key);
-                    if (res) {
-                        try { historyItems.push(JSON.parse(res)); } catch (e) {}
-                    }
-                }
-                if (historyItems.length > 0) return historyItems;
-            }
-
-            // Fallback: старый массив 'nws_history'
-            const legacyStr = await cloudStorage.getItem('nws_history');
-            if (!legacyStr) return [];
+            const userId = tg.initDataUnsafe?.user?.id;
+            if (!userId) return [];
             try {
-                const arr = JSON.parse(legacyStr);
-                return Array.isArray(arr) ? arr : [];
+                const res = await fetch(`${WORKER_URL}/api/history?userId=${encodeURIComponent(userId)}`);
+                const data = await res.json();
+                return Array.isArray(data) ? data : [];
             } catch (e) {
+                console.error('History load error:', e);
                 return [];
             }
         }
@@ -946,20 +830,6 @@
             } else { item[field] = value; }
         }
 
-        async function addToHistory(objectData) {
-            return new Promise((resolve) => {
-                 tg.CloudStorage.getItem('nws_history', (err, value) => {
-                    let history = [];
-                    if (!err && value) { try { history = JSON.parse(value); } catch(e){} }
-                    history.unshift(objectData);
-                    if(history.length > 20) history = history.slice(0, 20); 
-                    tg.CloudStorage.setItem('nws_history', JSON.stringify(history), (err) => {
-                        resolve();
-                    });
-                });
-            });
-        }
-
         async function sendOrder() {
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
@@ -1127,15 +997,17 @@
 
         async function clearHistory() {
             if (!confirm('Очистить всю историю заказов?')) return;
+            const userId = tg.initDataUnsafe?.user?.id;
+            if (!userId) { alert('Не удалось определить пользователя'); return; }
             try {
-                const index = await getHistoryIndex();
-                for (const key of index) {
-                    await cloudStorage.removeItem(key);
-                }
-                await cloudStorage.setItem('nws_history_idx', '[]');
-                await cloudStorage.setItem('nws_history', '[]');
+                const res = await fetch(`${WORKER_URL}/api/history`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: String(userId), history: [] })
+                });
+                if (!res.ok) throw new Error('Clear failed');
                 renderHistory();
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error(e); alert('Ошибка: ' + e.message); }
         }
 
         async function fetchOrdersForClient() {
@@ -1187,10 +1059,9 @@
             
             const hasOrders = history.some(h => h.title === 'Заказ на выкуп');
             const allOrders = hasOrders ? await fetchOrdersForClient() : [];
-            const index = await getHistoryIndex();
+            let historyUpdated = false;
             for (let i = 0; i < history.length; i++) {
                 const item = history[i];
-                const storageKey = index[i];
                 let orderStatusText = item.orderStatus || '';
                 let deliveryStatusText = item.deliveryStatus || '';
                 if (item.title === 'Заказ на выкуп') {
@@ -1207,9 +1078,7 @@
                         if (matched) {
                             status = matched;
                             item.orderNumber = matched.orderNumber;
-                            if (storageKey && item.orderNumber) {
-                                await cloudStorage.setItem(storageKey, JSON.stringify(item));
-                            }
+                            historyUpdated = true;
                         }
                     }
                     const formatted = formatOrderStatus(status);
@@ -1244,6 +1113,18 @@
                     </div>
                 `;
                 container.insertAdjacentHTML('beforeend', html);
+            }
+            if (historyUpdated) {
+                const userId = tg.initDataUnsafe?.user?.id;
+                if (userId) {
+                    try {
+                        await fetch(`${WORKER_URL}/api/history`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: String(userId), history })
+                        });
+                    } catch (_) {}
+                }
             }
         }
 
