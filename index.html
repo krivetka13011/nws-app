@@ -521,13 +521,32 @@
         let deliveryType = 'grey'; 
         let historyDataCache = [];
 
-        // --- HISTORY LOGIC (Cloudflare KV) ---
-        async function addToHistoryV2(dataObj) {
-            const userId = tg.initDataUnsafe?.user?.id;
-            if (!userId) {
-                console.error('History save: userId not available');
-                return;
+        // --- HISTORY LOGIC (Cloudflare KV + localStorage fallback) ---
+        const HISTORY_LOCAL_KEY = 'nws_history';
+
+        function getHistoryUserId() {
+            return tg.initDataUnsafe?.user?.id;
+        }
+
+        async function saveHistoryToBackend(history, userId) {
+            if (userId) {
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/history`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: String(userId), history })
+                    });
+                    if (res.ok) return true;
+                } catch (_) {}
             }
+            try {
+                localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(history));
+                return true;
+            } catch (e) { return false; }
+        }
+
+        async function addToHistoryV2(dataObj) {
+            const userId = getHistoryUserId();
             try {
                 let storageObj = JSON.parse(JSON.stringify(dataObj));
                 if (JSON.stringify(storageObj).length > 3500 && storageObj.itemsData) {
@@ -536,26 +555,47 @@
                         return rest;
                     });
                 }
-                const res = await fetch(`${WORKER_URL}/api/history`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: String(userId), orderData: storageObj })
-                });
-                if (!res.ok) throw new Error('History save failed');
+                const addToLocal = () => {
+                    const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
+                    let arr = raw ? JSON.parse(raw) : [];
+                    if (!Array.isArray(arr)) arr = [];
+                    arr.unshift(storageObj);
+                    if (arr.length > 20) arr = arr.slice(0, 20);
+                    localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(arr));
+                };
+                if (userId) {
+                    try {
+                        const res = await fetch(`${WORKER_URL}/api/history`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: String(userId), orderData: storageObj })
+                        });
+                        if (res.ok) { addToLocal(); return; }
+                    } catch (_) {}
+                }
+                addToLocal();
             } catch (e) { console.error('History save error:', e); }
         }
 
         async function loadFullHistory() {
-            const userId = tg.initDataUnsafe?.user?.id;
-            if (!userId) return [];
-            try {
-                const res = await fetch(`${WORKER_URL}/api/history?userId=${encodeURIComponent(userId)}`);
-                const data = await res.json();
-                return Array.isArray(data) ? data : [];
-            } catch (e) {
-                console.error('History load error:', e);
-                return [];
+            const userId = getHistoryUserId();
+            if (userId) {
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/history?userId=${encodeURIComponent(userId)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        return Array.isArray(data) ? data : [];
+                    }
+                } catch (_) {}
             }
+            try {
+                const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    return Array.isArray(arr) ? arr : [];
+                }
+            } catch (_) {}
+            return [];
         }
 
         // --- UI LOGIC ---
@@ -997,15 +1037,17 @@
 
         async function clearHistory() {
             if (!confirm('Очистить всю историю заказов?')) return;
-            const userId = tg.initDataUnsafe?.user?.id;
-            if (!userId) { alert('Не удалось определить пользователя'); return; }
+            const userId = getHistoryUserId();
             try {
-                const res = await fetch(`${WORKER_URL}/api/history`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: String(userId), history: [] })
-                });
-                if (!res.ok) throw new Error('Clear failed');
+                if (userId) {
+                    const res = await fetch(`${WORKER_URL}/api/history`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: String(userId), history: [] })
+                    });
+                    if (res.ok) { renderHistory(); return; }
+                }
+                localStorage.setItem(HISTORY_LOCAL_KEY, '[]');
                 renderHistory();
             } catch (e) { console.error(e); alert('Ошибка: ' + e.message); }
         }
@@ -1115,16 +1157,7 @@
                 container.insertAdjacentHTML('beforeend', html);
             }
             if (historyUpdated) {
-                const userId = tg.initDataUnsafe?.user?.id;
-                if (userId) {
-                    try {
-                        await fetch(`${WORKER_URL}/api/history`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: String(userId), history })
-                        });
-                    } catch (_) {}
-                }
+                await saveHistoryToBackend(history, getHistoryUserId());
             }
         }
 
