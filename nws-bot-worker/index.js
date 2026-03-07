@@ -1,7 +1,8 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400'
 };
 
 function jsonResponse(body, status = 200) {
@@ -22,7 +23,7 @@ export default {
 
     // Health-check
     if (request.method === 'GET' && url.pathname === '/') {
-      return new Response('Bot is running', { status: 200 });
+      return new Response('Bot is running', { status: 200, headers: CORS_HEADERS });
     }
 
     // GET /api/history?userId=12345 — получить историю пользователя
@@ -131,9 +132,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/orders') {
       const clientId = url.searchParams.get('clientId');
       if (!clientId || !env.CLIENTS) {
-        return new Response(JSON.stringify({ ok: false }), {
-          status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
+        return jsonResponse({ ok: false }, 400);
       }
       try {
         const list = await env.CLIENTS.list({ prefix: 'order_' });
@@ -156,14 +155,9 @@ export default {
             }
           } catch (_) {}
         }
-        return new Response(JSON.stringify({ ok: true, orders }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
+        return jsonResponse({ ok: true, orders });
       } catch (e) {
-        return new Response(JSON.stringify({ ok: false }), {
-          status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
+        return jsonResponse({ ok: false }, 500);
       }
     }
 
@@ -172,9 +166,7 @@ export default {
       const orderId = url.searchParams.get('orderId');
       const orderNumber = url.searchParams.get('orderNumber');
       if ((!orderId && !orderNumber) || !env.CLIENTS) {
-        return new Response(JSON.stringify({ ok: false }), {
-          status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
+        return jsonResponse({ ok: false }, 400);
       }
       try {
         let stored = null;
@@ -186,26 +178,18 @@ export default {
           stored = await env.CLIENTS.get(`order_${orderId}`);
         }
         if (!stored) {
-          return new Response(JSON.stringify({ ok: false }), {
-            status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-          });
+          return jsonResponse({ ok: false }, 404);
         }
         const od = JSON.parse(stored);
-        const body = JSON.stringify({
+        return jsonResponse({
           ok: true,
           orderNumber: od.orderNumber || null,
           orderPaid: od.orderPaid || false,
           deliveryPaid: od.deliveryPaid || false,
           deliveryAmount: od.deliveryAmount || null
         });
-        return new Response(body, {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
       } catch (e) {
-        return new Response(JSON.stringify({ ok: false }), {
-          status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
+        return jsonResponse({ ok: false }, 500);
       }
     }
 
@@ -235,7 +219,7 @@ export default {
       return new Response('OK', { status: 200 });
     }
 
-    return new Response('Not found', { status: 404 });
+    return new Response('Not found', { status: 404, headers: CORS_HEADERS });
   }
 };
 
