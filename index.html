@@ -197,8 +197,9 @@
             flex-direction: column;
             gap: 2px;
         }
-        .history-status .status-paid { color: #22c55e; }      /* зелёный */
-        .history-status .status-unpaid { color: #f97316; }   /* оранжевый */
+        .status-paid { color: #22c55e !important; }      /* зелёный */
+        .status-unpaid { color: #ef4444 !important; }   /* красный */
+        .history-status .status-paid, .history-status .status-unpaid { display: block; }
         
         /* ЦЕНА В ИСТОРИИ (2 строки) */
         .history-price { 
@@ -507,6 +508,7 @@
         tg.setBackgroundColor('#050505');
         const RATE_MULTIPLIER = 13; 
         const ORDER_HELP_URL = 'https://telegra.ph/Kak-i-zachem-sozdavat-Kitajskij-nomer-09-02'; 
+        const ORDER_STATUS_URL = 'https://nwsnumbot.krivetkagames.workers.dev/order-status';
         
         let currentTab = 'calc';
         let orderItems = [];
@@ -698,17 +700,29 @@
             return text.replace(/(https?:\/\/[^\s]+)/g, '<span class="link-url">$1</span>');
         }
 
-        function openHistoryDetails(index) {
+        async function openHistoryDetails(index) {
             const item = historyDataCache[index];
             if(!item) return;
+
+            let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
+            let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
+            if (item.orderId) {
+                const status = await fetchOrderStatus(item.orderId);
+                const formatted = formatOrderStatus(status);
+                orderStatusText = formatted.order;
+                deliveryStatusText = formatted.delivery;
+            }
 
             document.getElementById('detailTitle').innerText = item.title;
             document.getElementById('detailDate').innerText = item.date;
             document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
-            // Simple display of price in header, strip HTML if saved as HTML
             document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0].trim() : '0 ₽';
-            document.getElementById('detailOrderStatus').innerText = item.orderStatus || 'Не указан';
-            document.getElementById('detailDeliveryStatus').innerText = item.deliveryStatus || 'Не указана';
+            const orderEl = document.getElementById('detailOrderStatus');
+            const delEl = document.getElementById('detailDeliveryStatus');
+            orderEl.innerText = orderStatusText;
+            delEl.innerText = deliveryStatusText;
+            orderEl.className = 'detail-value ' + (orderStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid');
+            delEl.className = 'detail-value ' + (deliveryStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid');
 
             const listContainer = document.getElementById('detailItemsList');
             listContainer.innerHTML = '';
@@ -947,6 +961,9 @@
                     }
                 });
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                const orderTs = Date.now();
+                const userId = tg.initDataUnsafe?.user?.id || 0;
+                const orderId = `${userId}_${orderTs}`;
                 // Save price as stacked HTML
                 const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
                 const historyObj = {
@@ -956,11 +973,12 @@
                     price: priceHtml,
                     itemsData: orderItems,
                     images: historyImages,
-                    orderStatus: 'Заказ: не оплачен',
-                    deliveryStatus: 'Доставка: не выставлена'
+                    orderId,
+                    orderStatus: '🔴 Заказ: Не оплачен',
+                    deliveryStatus: '🔴 Доставка: Счёт не выставлен'
                 };
                 await addToHistoryV2(historyObj);
-                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)' };
+                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)', timestamp: orderTs };
                 let json = JSON.stringify(data);
                 // Telegram sendData limit: 4096 bytes
                 if (json.length > 4000) {
@@ -1083,6 +1101,27 @@
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
+        async function fetchOrderStatus(orderId) {
+            if (!orderId) return null;
+            try {
+                const res = await fetch(`${ORDER_STATUS_URL}?orderId=${encodeURIComponent(orderId)}`);
+                const data = await res.json();
+                return data.ok ? data : null;
+            } catch (e) { return null; }
+        }
+
+        function formatOrderStatus(status) {
+            if (!status) return { order: '🔴 Заказ: Не оплачен', delivery: '🔴 Доставка: Счёт не выставлен' };
+            const order = status.orderPaid ? '🟢 Заказ: Оплачен' : '🔴 Заказ: Не оплачен';
+            let delivery;
+            if (status.deliveryAmount) {
+                delivery = status.deliveryPaid ? '🟢 Доставка: Оплачена' : `🔴 Доставка: ${status.deliveryAmount} ₽ — Не оплачена`;
+            } else {
+                delivery = '🔴 Доставка: Счёт не выставлен';
+            }
+            return { order, delivery };
+        }
+
         async function renderHistory() {
             const container = document.getElementById('historyList');
             container.innerHTML = '<div style="text-align:center; margin-top:20px; color:#666;">Загрузка...</div>';
@@ -1093,7 +1132,19 @@
             
             if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
             
-            history.forEach((item, index) => {
+            for (let index = 0; index < history.length; index++) {
+                const item = history[index];
+                let orderStatusText = item.orderStatus || '';
+                let deliveryStatusText = item.deliveryStatus || '';
+                if (item.orderId) {
+                    const status = await fetchOrderStatus(item.orderId);
+                    const formatted = formatOrderStatus(status);
+                    orderStatusText = formatted.order;
+                    deliveryStatusText = formatted.delivery;
+                    item.orderStatus = orderStatusText;
+                    item.deliveryStatus = deliveryStatusText;
+                }
+
                 let imagesHtml = '';
                 if (item.images && item.images.length > 0) {
                     imagesHtml = `<div class="history-imgs">
@@ -1101,12 +1152,10 @@
                         </div>`;
                 }
 
-                const orderStatusText = item.orderStatus || '';
-                const deliveryStatusText = item.deliveryStatus || '';
                 const statusHtml = (orderStatusText || deliveryStatusText)
                     ? `<div class="history-status">
-                            ${orderStatusText ? `<span class="${orderStatusText.toLowerCase().includes('оплачен') ? 'status-paid' : 'status-unpaid'}">${orderStatusText}</span>` : ''}
-                            ${deliveryStatusText ? `<span class="${deliveryStatusText.toLowerCase().includes('оплачена') ? 'status-paid' : 'status-unpaid'}">${deliveryStatusText}</span>` : ''}
+                            ${orderStatusText ? `<span class="${orderStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid'}">${orderStatusText}</span>` : ''}
+                            ${deliveryStatusText ? `<span class="${deliveryStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid'}">${deliveryStatusText}</span>` : ''}
                        </div>`
                     : '';
 
@@ -1120,7 +1169,7 @@
                     </div>
                 `;
                 container.insertAdjacentHTML('beforeend', html);
-            });
+            }
         }
 
         // Инициализация интерфейса после загрузки скрипта
