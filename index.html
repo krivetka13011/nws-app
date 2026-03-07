@@ -757,11 +757,15 @@
                 if (data.success) screenshotUrl = data.data.url;
             } catch (e) { console.error(e); }
 
-            const userId = getHistoryUserId();
-            if (!userId) { alert('Не удалось определить пользователя'); return; }
+            let clientId = getHistoryUserId();
+            if (!clientId && item.orderId) {
+                const parts = String(item.orderId).split('_');
+                if (parts[0]) clientId = parts[0];
+            }
+            if (!clientId) { alert('Не удалось определить пользователя'); btns.forEach((b, i) => { b.disabled = false; b.innerHTML = i === 0 ? '<i class="fas fa-check"></i> Заказ оплачен + скриншот' : '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; }); return; }
             try {
                 const body = {
-                    clientId: String(userId),
+                    clientId: String(clientId),
                     type,
                     screenshotUrl: screenshotUrl || undefined
                 };
