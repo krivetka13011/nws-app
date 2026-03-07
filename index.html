@@ -527,6 +527,7 @@
         let historyDataCache = [];
         let lastOrdersCache = [];
         let currentDetailItem = null;
+        let currentDetailClientId = null;
         let pendingPaymentType = null;
 
         // --- HISTORY LOGIC (Cloudflare KV + localStorage fallback) ---
@@ -640,6 +641,7 @@
             const item = historyDataCache[index];
             if(!item) return;
             currentDetailItem = item;
+            currentDetailClientId = getHistoryUserId();
 
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
@@ -652,6 +654,7 @@
                 const status = findOrderStatus(orders, item);
                 if (status) {
                     if (!item.orderNumber) item.orderNumber = status.orderNumber;
+                    if (status.orderId) item.orderId = status.orderId;
                     orderPaid = status.orderPaid;
                     deliveryPaid = status.deliveryPaid;
                     hasDeliveryAmount = !!status.deliveryAmount;
@@ -737,6 +740,16 @@
             document.getElementById('paymentProofInput').click();
         }
 
+        function restorePaymentButtons() {
+            const paySection = document.getElementById('detailPaymentSection');
+            if (!paySection) return;
+            const btns = paySection.querySelectorAll('button');
+            const orderBtn = paySection.querySelector('[onclick*="order"]');
+            const delBtn = paySection.querySelector('[onclick*="delivery"]');
+            if (orderBtn) { orderBtn.disabled = false; orderBtn.innerHTML = '<i class="fas fa-check"></i> Заказ оплачен + скриншот'; }
+            if (delBtn) { delBtn.disabled = false; delBtn.innerHTML = '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; }
+        }
+
         async function handlePaymentProofUpload(event) {
             const file = event.target?.files?.[0];
             event.target.value = '';
@@ -747,6 +760,7 @@
 
             const btns = document.querySelectorAll('#detailPaymentSection button');
             btns.forEach(b => { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...'; });
+
             let screenshotUrl = '';
             try {
                 const blob = await compressImage(file);
@@ -755,29 +769,41 @@
                 const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.success) screenshotUrl = data.data.url;
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error('ImgBB upload:', e);
+                restorePaymentButtons();
+                alert('Ошибка загрузки фото');
+                return;
+            }
 
-            let clientId = getHistoryUserId();
+            let clientId = currentDetailClientId || getHistoryUserId();
             if (!clientId && item.orderId) {
                 const parts = String(item.orderId).split('_');
-                if (parts[0]) clientId = parts[0];
+                if (parts[0] && parts[0] !== '0') clientId = parts[0];
             }
-            if (!clientId) { alert('Не удалось определить пользователя'); btns.forEach((b, i) => { b.disabled = false; b.innerHTML = i === 0 ? '<i class="fas fa-check"></i> Заказ оплачен + скриншот' : '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; }); return; }
+            if (!clientId) {
+                restorePaymentButtons();
+                alert('Не удалось определить пользователя');
+                return;
+            }
+            if (!item.orderNumber && !item.orderId) {
+                restorePaymentButtons();
+                alert('Заказ не найден. Обновите историю.');
+                return;
+            }
+
             try {
-                const body = {
-                    clientId: String(clientId),
-                    type,
-                    screenshotUrl: screenshotUrl || undefined
-                };
+                const body = { clientId: String(clientId), type, screenshotUrl: screenshotUrl || undefined };
                 if (item.orderNumber) body.orderNumber = item.orderNumber;
-                else if (item.orderId) body.orderId = item.orderId;
-                else { alert('Заказ не найден'); return; }
+                if (item.orderId) body.orderId = item.orderId;
+
                 const res = await fetch(`${WORKER_URL}/api/payment-proof`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
                 const data = await res.json();
+
                 if (data.ok) {
                     item.orderStatus = type === 'order' ? '🟢 Заказ: Оплачен' : item.orderStatus;
                     item.deliveryStatus = type === 'delivery' ? '🟢 Доставка: Оплачена' : item.deliveryStatus;
@@ -792,16 +818,16 @@
                     document.getElementById('detailDeliveryStatus').innerText = item.deliveryStatus;
                     document.getElementById('detailOrderStatus').className = 'detail-value ' + (item.orderStatus.includes('🟢') ? 'status-paid' : 'status-unpaid');
                     document.getElementById('detailDeliveryStatus').className = 'detail-value ' + (item.deliveryStatus.includes('🟢') ? 'status-paid' : 'status-unpaid');
-                    const paySection = document.getElementById('detailPaymentSection');
-                    if (paySection) paySection.classList.add('hidden');
-                    alert('Оплата отмечена! Менеджер получит скриншот.');
+                    document.getElementById('detailPaymentSection').classList.add('hidden');
+                    document.getElementById('detailPaymentSection').innerHTML = '';
+                    alert('✅ Оплата отмечена! Менеджер получил скриншот.');
                 } else {
+                    restorePaymentButtons();
                     alert(data.error || 'Ошибка');
-                    btns.forEach((b, i) => { b.disabled = false; b.innerHTML = i === 0 ? '<i class="fas fa-check"></i> Заказ оплачен + скриншот' : '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; });
                 }
             } catch (e) {
+                restorePaymentButtons();
                 alert('Ошибка: ' + (e.message || e));
-                btns.forEach((b, i) => { b.disabled = false; b.innerHTML = i === 0 ? '<i class="fas fa-check"></i> Заказ оплачен + скриншот' : '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; });
             }
         }
 
