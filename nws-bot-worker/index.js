@@ -70,6 +70,66 @@ export default {
       }
     }
 
+    // POST /api/payment-proof — клиент отмечает оплату + скриншот
+    if (request.method === 'POST' && url.pathname === '/api/payment-proof') {
+      if (!env.CLIENTS) return jsonResponse({ ok: false, error: 'Not configured' }, 500);
+      let body;
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
+      }
+      const { clientId, orderNumber, orderId, type, screenshotUrl } = body;
+      if (!clientId || !type || !['order', 'delivery'].includes(type)) {
+        return jsonResponse({ ok: false, error: 'clientId and type (order|delivery) required' }, 400);
+      }
+      try {
+        let foundKey = null;
+        let orderData = null;
+        if (orderNumber) {
+          const ref = await env.CLIENTS.get(`order_by_num_${orderNumber}`);
+          if (ref) {
+            foundKey = `order_${ref}`;
+            const stored = await env.CLIENTS.get(foundKey);
+            if (stored) orderData = JSON.parse(stored);
+          }
+        }
+        if (!orderData && orderId) {
+          foundKey = `order_${orderId}`;
+          const stored = await env.CLIENTS.get(foundKey);
+          if (stored) orderData = JSON.parse(stored);
+        }
+        if (!orderData || Number(orderData.clientId) !== Number(clientId)) {
+          return jsonResponse({ ok: false, error: 'Order not found or access denied' }, 404);
+        }
+        if (type === 'order') {
+          orderData.orderPaid = true;
+        } else {
+          if (!orderData.deliveryAmount) return jsonResponse({ ok: false, error: 'Delivery amount not set' }, 400);
+          orderData.deliveryPaid = true;
+        }
+        await env.CLIENTS.put(foundKey, JSON.stringify(orderData));
+
+        const groupId = getGroupId(env);
+        const topicId = await getOrCreateTopic(env, Number(clientId), { id: clientId, first_name: 'Клиент' });
+        if (topicId && groupId) {
+          const typeText = type === 'order' ? 'заказа' : 'доставки';
+          let text = `✅ Клиент отметил оплату ${typeText} по заказу №${orderData.orderNumber}`;
+          if (screenshotUrl) text += `\n\n📎 Скриншот: ${screenshotUrl}`;
+          await callTelegram(env, 'sendMessage', {
+            chat_id: groupId,
+            message_thread_id: topicId,
+            text,
+            disable_web_page_preview: !screenshotUrl
+          });
+        }
+        await updateClientStatusMsg(env, orderData, foundKey);
+        return jsonResponse({ ok: true });
+      } catch (e) {
+        return jsonResponse({ ok: false, error: String(e) }, 500);
+      }
+    }
+
     // PUT /api/history — заменить всю историю (для очистки и обновления orderNumber)
     if (request.method === 'PUT' && url.pathname === '/api/history') {
       if (!env.ORDERS_KV) {

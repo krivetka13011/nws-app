@@ -485,10 +485,12 @@
                 <div class="detail-row"><span class="detail-label">Статус доставки</span><span class="detail-value" id="detailDeliveryStatus"></span></div>
                 <div class="detail-row" style="border-bottom:none;"><span class="detail-label">Итоговая сумма</span><span class="detail-value text-[#60a5fa]" id="detailTotal"></span></div>
             </div>
+            <div id="detailPaymentSection" class="hidden mb-4"></div>
             <h4 class="text-sm font-bold text-[var(--text-secondary)] uppercase mb-3 px-2">Список товаров</h4>
             <div id="detailItemsList" class="history-detail-scroll"></div>
         </div>
     </div>
+    <input type="file" id="paymentProofInput" accept="image/*" class="hidden" onchange="handlePaymentProofUpload(event)">
 
     <!-- ACTIONS -->
     <div class="action-bar">
@@ -523,7 +525,9 @@
         let searchItems = [];
         let deliveryType = 'grey'; 
         let historyDataCache = [];
-        let lastOrdersCache = []; // кэш заказов для быстрого отображения статусов
+        let lastOrdersCache = [];
+        let currentDetailItem = null;
+        let pendingPaymentType = null;
 
         // --- HISTORY LOGIC (Cloudflare KV + localStorage fallback) ---
         const HISTORY_LOCAL_KEY = 'nws_history';
@@ -635,17 +639,43 @@
         async function openHistoryDetails(index) {
             const item = historyDataCache[index];
             if(!item) return;
+            currentDetailItem = item;
 
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
+            let orderPaid = false;
+            let deliveryPaid = false;
+            let hasDeliveryAmount = false;
             if (item.title === 'Заказ на выкуп') {
                 const orders = await fetchOrdersForClient();
                 lastOrdersCache = orders;
                 const status = findOrderStatus(orders, item);
-                if (status && !item.orderNumber) item.orderNumber = status.orderNumber;
+                if (status) {
+                    if (!item.orderNumber) item.orderNumber = status.orderNumber;
+                    orderPaid = status.orderPaid;
+                    deliveryPaid = status.deliveryPaid;
+                    hasDeliveryAmount = !!status.deliveryAmount;
+                }
                 const formatted = formatOrderStatus(status);
                 orderStatusText = formatted.order;
                 deliveryStatusText = formatted.delivery;
+            }
+
+            const paySection = document.getElementById('detailPaymentSection');
+            if (item.title === 'Заказ на выкуп' && (!orderPaid || (hasDeliveryAmount && !deliveryPaid))) {
+                paySection.classList.remove('hidden');
+                let html = '<div class="card p-4"><h4 class="text-sm font-bold text-[var(--text-secondary)] uppercase mb-3">Отметить оплату</h4>';
+                if (!orderPaid) {
+                    html += `<button onclick="showPaymentProofInput('order')" class="btn-secondary w-full py-3 mb-2 gap-2"><i class="fas fa-check"></i> Заказ оплачен + скриншот</button>`;
+                }
+                if (hasDeliveryAmount && !deliveryPaid) {
+                    html += `<button onclick="showPaymentProofInput('delivery')" class="btn-secondary w-full py-3 gap-2"><i class="fas fa-truck"></i> Доставка оплачена + скриншот</button>`;
+                }
+                html += '</div>';
+                paySection.innerHTML = html;
+            } else {
+                paySection.classList.add('hidden');
+                paySection.innerHTML = '';
             }
 
             document.getElementById('detailTitle').innerText = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : item.title;
@@ -699,6 +729,75 @@
         function closeHistoryDetails(event) {
             if (!event || event.target === document.getElementById('historyDetailSheet') || event.target.classList.contains('sheet-handle')) {
                 document.getElementById('historyDetailSheet').classList.remove('open');
+            }
+        }
+
+        function showPaymentProofInput(type) {
+            pendingPaymentType = type;
+            document.getElementById('paymentProofInput').click();
+        }
+
+        async function handlePaymentProofUpload(event) {
+            const file = event.target?.files?.[0];
+            event.target.value = '';
+            if (!file || !currentDetailItem || !pendingPaymentType) return;
+            const item = currentDetailItem;
+            const type = pendingPaymentType;
+            pendingPaymentType = null;
+
+            const btns = document.querySelectorAll('#detailPaymentSection button');
+            btns.forEach(b => { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...'; });
+            let screenshotUrl = '';
+            try {
+                const blob = await compressImage(file);
+                const formData = new FormData();
+                formData.append('image', blob, file.name);
+                const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) screenshotUrl = data.data.url;
+            } catch (e) { console.error(e); }
+
+            const userId = getHistoryUserId();
+            if (!userId) { alert('Не удалось определить пользователя'); return; }
+            try {
+                const body = {
+                    clientId: String(userId),
+                    type,
+                    screenshotUrl: screenshotUrl || undefined
+                };
+                if (item.orderNumber) body.orderNumber = item.orderNumber;
+                else if (item.orderId) body.orderId = item.orderId;
+                else { alert('Заказ не найден'); return; }
+                const res = await fetch(`${WORKER_URL}/api/payment-proof`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    item.orderStatus = type === 'order' ? '🟢 Заказ: Оплачен' : item.orderStatus;
+                    item.deliveryStatus = type === 'delivery' ? '🟢 Доставка: Оплачена' : item.deliveryStatus;
+                    lastOrdersCache = lastOrdersCache.map(o => {
+                        if ((item.orderNumber && o.orderNumber === item.orderNumber) || (item.orderId && o.orderId === item.orderId)) {
+                            if (type === 'order') o.orderPaid = true;
+                            else o.deliveryPaid = true;
+                        }
+                        return o;
+                    });
+                    document.getElementById('detailOrderStatus').innerText = item.orderStatus;
+                    document.getElementById('detailDeliveryStatus').innerText = item.deliveryStatus;
+                    document.getElementById('detailOrderStatus').className = 'detail-value ' + (item.orderStatus.includes('🟢') ? 'status-paid' : 'status-unpaid');
+                    document.getElementById('detailDeliveryStatus').className = 'detail-value ' + (item.deliveryStatus.includes('🟢') ? 'status-paid' : 'status-unpaid');
+                    const paySection = document.getElementById('detailPaymentSection');
+                    if (paySection) paySection.classList.add('hidden');
+                    alert('Оплата отмечена! Менеджер получит скриншот.');
+                } else {
+                    alert(data.error || 'Ошибка');
+                    btns.forEach((b, i) => { b.disabled = false; b.innerHTML = i === 0 ? '<i class="fas fa-check"></i> Заказ оплачен + скриншот' : '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; });
+                }
+            } catch (e) {
+                alert('Ошибка: ' + (e.message || e));
+                btns.forEach((b, i) => { b.disabled = false; b.innerHTML = i === 0 ? '<i class="fas fa-check"></i> Заказ оплачен + скриншот' : '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; });
             }
         }
 
