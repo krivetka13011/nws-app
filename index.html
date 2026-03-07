@@ -485,12 +485,10 @@
                 <div class="detail-row"><span class="detail-label">Статус доставки</span><span class="detail-value" id="detailDeliveryStatus"></span></div>
                 <div class="detail-row" style="border-bottom:none;"><span class="detail-label">Итоговая сумма</span><span class="detail-value text-[#60a5fa]" id="detailTotal"></span></div>
             </div>
-            <div id="detailPaymentSection" class="hidden mb-4"></div>
             <h4 class="text-sm font-bold text-[var(--text-secondary)] uppercase mb-3 px-2">Список товаров</h4>
             <div id="detailItemsList" class="history-detail-scroll"></div>
         </div>
     </div>
-    <input type="file" id="paymentProofInput" accept="image/*" class="hidden" onchange="handlePaymentProofUpload(event)">
 
     <!-- ACTIONS -->
     <div class="action-bar">
@@ -527,8 +525,6 @@
         let historyDataCache = [];
         let lastOrdersCache = [];
         let currentDetailItem = null;
-        let currentDetailClientId = null;
-        let pendingPaymentType = null;
 
         // --- HISTORY LOGIC (Cloudflare KV + localStorage fallback) ---
         const HISTORY_LOCAL_KEY = 'nws_history';
@@ -641,13 +637,9 @@
             const item = historyDataCache[index];
             if(!item) return;
             currentDetailItem = item;
-            currentDetailClientId = getHistoryUserId();
 
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
-            let orderPaid = false;
-            let deliveryPaid = false;
-            let hasDeliveryAmount = false;
             if (item.title === 'Заказ на выкуп') {
                 const orders = await fetchOrdersForClient();
                 lastOrdersCache = orders;
@@ -655,30 +647,10 @@
                 if (status) {
                     if (!item.orderNumber) item.orderNumber = status.orderNumber;
                     if (status.orderId) item.orderId = status.orderId;
-                    orderPaid = status.orderPaid;
-                    deliveryPaid = status.deliveryPaid;
-                    hasDeliveryAmount = !!status.deliveryAmount;
                 }
                 const formatted = formatOrderStatus(status);
                 orderStatusText = formatted.order;
                 deliveryStatusText = formatted.delivery;
-            }
-
-            const paySection = document.getElementById('detailPaymentSection');
-            if (item.title === 'Заказ на выкуп' && (!orderPaid || (hasDeliveryAmount && !deliveryPaid))) {
-                paySection.classList.remove('hidden');
-                let html = '<div class="card p-4"><h4 class="text-sm font-bold text-[var(--text-secondary)] uppercase mb-3">Отметить оплату</h4>';
-                if (!orderPaid) {
-                    html += `<button onclick="showPaymentProofInput('order')" class="btn-secondary w-full py-3 mb-2 gap-2"><i class="fas fa-check"></i> Заказ оплачен + скриншот</button>`;
-                }
-                if (hasDeliveryAmount && !deliveryPaid) {
-                    html += `<button onclick="showPaymentProofInput('delivery')" class="btn-secondary w-full py-3 gap-2"><i class="fas fa-truck"></i> Доставка оплачена + скриншот</button>`;
-                }
-                html += '</div>';
-                paySection.innerHTML = html;
-            } else {
-                paySection.classList.add('hidden');
-                paySection.innerHTML = '';
             }
 
             document.getElementById('detailTitle').innerText = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : item.title;
@@ -735,101 +707,6 @@
             }
         }
 
-        function showPaymentProofInput(type) {
-            pendingPaymentType = type;
-            document.getElementById('paymentProofInput').click();
-        }
-
-        function restorePaymentButtons() {
-            const paySection = document.getElementById('detailPaymentSection');
-            if (!paySection) return;
-            const btns = paySection.querySelectorAll('button');
-            const orderBtn = paySection.querySelector('[onclick*="order"]');
-            const delBtn = paySection.querySelector('[onclick*="delivery"]');
-            if (orderBtn) { orderBtn.disabled = false; orderBtn.innerHTML = '<i class="fas fa-check"></i> Заказ оплачен + скриншот'; }
-            if (delBtn) { delBtn.disabled = false; delBtn.innerHTML = '<i class="fas fa-truck"></i> Доставка оплачена + скриншот'; }
-        }
-
-        async function handlePaymentProofUpload(event) {
-            const file = event.target?.files?.[0];
-            event.target.value = '';
-            if (!file || !currentDetailItem || !pendingPaymentType) return;
-            const item = currentDetailItem;
-            const type = pendingPaymentType;
-            pendingPaymentType = null;
-
-            const btns = document.querySelectorAll('#detailPaymentSection button');
-            btns.forEach(b => { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...'; });
-
-            let screenshotUrl = '';
-            try {
-                const blob = await compressImage(file);
-                const formData = new FormData();
-                formData.append('image', blob, file.name);
-                const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: formData });
-                const data = await res.json();
-                if (data.success) screenshotUrl = data.data.url;
-            } catch (e) {
-                console.error('ImgBB upload:', e);
-                restorePaymentButtons();
-                alert('Ошибка загрузки фото');
-                return;
-            }
-
-            let clientId = currentDetailClientId || getHistoryUserId();
-            if (!clientId && item.orderId) {
-                const parts = String(item.orderId).split('_');
-                if (parts[0] && parts[0] !== '0') clientId = parts[0];
-            }
-            if (!clientId) {
-                restorePaymentButtons();
-                alert('Не удалось определить пользователя');
-                return;
-            }
-            if (!item.orderNumber && !item.orderId) {
-                restorePaymentButtons();
-                alert('Заказ не найден. Обновите историю.');
-                return;
-            }
-
-            try {
-                const body = { clientId: String(clientId), type, screenshotUrl: screenshotUrl || undefined };
-                if (item.orderNumber) body.orderNumber = item.orderNumber;
-                if (item.orderId) body.orderId = item.orderId;
-
-                const res = await fetch(`${WORKER_URL}/api/payment-proof`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-
-                if (data.ok) {
-                    item.orderStatus = type === 'order' ? '🟢 Заказ: Оплачен' : item.orderStatus;
-                    item.deliveryStatus = type === 'delivery' ? '🟢 Доставка: Оплачена' : item.deliveryStatus;
-                    lastOrdersCache = lastOrdersCache.map(o => {
-                        if ((item.orderNumber && o.orderNumber === item.orderNumber) || (item.orderId && o.orderId === item.orderId)) {
-                            if (type === 'order') o.orderPaid = true;
-                            else o.deliveryPaid = true;
-                        }
-                        return o;
-                    });
-                    document.getElementById('detailOrderStatus').innerText = item.orderStatus;
-                    document.getElementById('detailDeliveryStatus').innerText = item.deliveryStatus;
-                    document.getElementById('detailOrderStatus').className = 'detail-value ' + (item.orderStatus.includes('🟢') ? 'status-paid' : 'status-unpaid');
-                    document.getElementById('detailDeliveryStatus').className = 'detail-value ' + (item.deliveryStatus.includes('🟢') ? 'status-paid' : 'status-unpaid');
-                    document.getElementById('detailPaymentSection').classList.add('hidden');
-                    document.getElementById('detailPaymentSection').innerHTML = '';
-                    alert('✅ Оплата отмечена! Менеджер получил скриншот.');
-                } else {
-                    restorePaymentButtons();
-                    alert(data.error || 'Ошибка');
-                }
-            } catch (e) {
-                restorePaymentButtons();
-                alert('Ошибка: ' + (e.message || e));
-            }
-        }
 
         function formatPrice(num) {
             if(!num) return '0';
@@ -1000,21 +877,54 @@
         async function sendOrder() {
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
+                const userId = tg.initDataUnsafe?.user?.id;
+                if (!userId) {
+                    alert("Не удалось определить пользователя. Перезапустите приложение через бота.");
+                    return;
+                }
+
+                const btn = document.getElementById('btn-action-order');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...';
+
                 let totalRub = 0;
                 let totalYuan = 0;
                 orderItems.forEach(i => {
                     const val = i.price || 0;
-                    if(val > 0) {
+                    if (val > 0) {
                         totalYuan += val;
                         const comm = deliveryType === 'white' ? 0.10 : 0.05;
                         totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
                     }
                 });
-                const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
+
                 const orderTs = Date.now();
-                const userId = tg.initDataUnsafe?.user?.id || 0;
-                const orderId = `${userId}_${orderTs}`;
-                // Save price as stacked HTML
+                const user = tg.initDataUnsafe?.user || {};
+
+                const res = await fetch(`${WORKER_URL}/api/create-order`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId,
+                        username: user.username || '',
+                        firstName: user.first_name || '',
+                        lastName: user.last_name || '',
+                        items: orderItems,
+                        deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
+                        timestamp: orderTs
+                    })
+                });
+
+                const data = await res.json();
+                if (!data.ok) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    alert('Ошибка: ' + (data.error || 'Не удалось создать заказ'));
+                    return;
+                }
+
+                const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
                 const historyObj = {
                     title: 'Заказ на выкуп',
@@ -1024,31 +934,27 @@
                     totalRub,
                     itemsData: orderItems,
                     images: historyImages,
-                    orderId,
+                    orderId: data.orderId,
+                    orderNumber: data.orderNumber,
+                    timestamp: orderTs,
                     orderStatus: '🔴 Заказ: Не оплачен',
                     deliveryStatus: '🔴 Доставка: Счёт не выставлен'
                 };
                 await addToHistoryV2(historyObj);
-                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)', timestamp: orderTs };
-                let json = JSON.stringify(data);
-                // Telegram sendData limit: 4096 bytes
-                if (json.length > 4000) {
-                    const trimmed = data.items.map(i => ({
-                        link: i.link,
-                        price: i.price,
-                        resYuan: i.resYuan,
-                        resRub: i.resRub,
-                        imgUrls: (i.imgUrls || []).slice(0, 2)
-                    }));
-                    data.items = trimmed;
-                    json = JSON.stringify(data);
-                    if (json.length > 4000) {
-                        data.items = data.items.map(i => ({ ...i, imgUrls: [] }));
-                        json = JSON.stringify(data);
+
+                btn.innerHTML = '<i class="fas fa-check"></i> Заказ отправлен!';
+                setTimeout(() => {
+                    try { tg.close(); } catch (_) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        alert('✅ Заказ №' + data.orderNumber + ' успешно оформлен!');
                     }
-                }
-                tg.sendData(json);
-            } catch (e) { alert("Ошибка: " + e.message); }
+                }, 1500);
+            } catch (e) {
+                const btn = document.getElementById('btn-action-order');
+                if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
+                alert("Ошибка: " + e.message);
+            }
         }
 
         function addSearchItem() {
@@ -1213,6 +1119,25 @@
             if (item.orderId) {
                 const o = allOrders.find(x => x.orderId === item.orderId);
                 if (o) return o;
+            }
+            if (item.timestamp) {
+                const ts = Number(item.timestamp);
+                const o = allOrders.find(x => x.timestamp && Math.abs(Number(x.timestamp) - ts) < 5000);
+                if (o) return o;
+            }
+            if (item.orderId) {
+                const parts = String(item.orderId).split('_');
+                if (parts.length >= 2) {
+                    const ts = Number(parts[parts.length - 1]);
+                    if (ts > 0) {
+                        const o = allOrders.find(x => {
+                            const xParts = String(x.orderId).split('_');
+                            const xTs = xParts.length >= 2 ? Number(xParts[xParts.length - 1]) : 0;
+                            return xTs > 0 && Math.abs(xTs - ts) < 5000;
+                        });
+                        if (o) return o;
+                    }
+                }
             }
             const totalRub = parseTotalRubFromItem(item);
             if (totalRub) return matchOrderByTotalRub(allOrders, totalRub);

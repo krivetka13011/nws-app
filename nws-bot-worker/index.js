@@ -71,8 +71,8 @@ export default {
       }
     }
 
-    // POST /api/payment-proof — клиент отмечает оплату + скриншот
-    if (request.method === 'POST' && url.pathname === '/api/payment-proof') {
+    // POST /api/create-order — создание заказа через API (Вариант А)
+    if (request.method === 'POST' && url.pathname === '/api/create-order') {
       if (!env.CLIENTS) return jsonResponse({ ok: false, error: 'Not configured' }, 500);
       let body;
       try {
@@ -80,52 +80,129 @@ export default {
       } catch (_) {
         return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
       }
-      const { clientId, orderNumber, orderId, type, screenshotUrl } = body;
-      if (!clientId || !type || !['order', 'delivery'].includes(type)) {
-        return jsonResponse({ ok: false, error: 'clientId and type (order|delivery) required' }, 400);
+      const { userId, username, firstName, lastName, items, deliveryType, timestamp } = body;
+      if (!userId || !items || !Array.isArray(items) || items.length === 0) {
+        return jsonResponse({ ok: false, error: 'userId and items required' }, 400);
       }
       try {
-        let foundKey = null;
-        let orderData = null;
-        if (orderNumber) {
-          const ref = await env.CLIENTS.get(`order_by_num_${orderNumber}`);
-          if (ref) {
-            foundKey = `order_${ref}`;
-            const stored = await env.CLIENTS.get(foundKey);
-            if (stored) orderData = JSON.parse(stored);
+        const chatId = Number(userId);
+        const isWhite = /белая|white/i.test(deliveryType || '');
+        const user = { id: chatId, username, first_name: firstName, last_name: lastName };
+        const topicId = await getOrCreateTopic(env, chatId, user);
+        const groupId = getGroupId(env);
+
+        const totalRub = items.reduce((sum, it) => sum + calcRub(it.price ?? it.resYuan ?? 0, isWhite), 0);
+        const totalYuan = items.reduce((sum, it) => {
+          const v = Number(it.resYuan ?? it.price ?? 0);
+          return sum + (Number.isNaN(v) ? 0 : v);
+        }, 0);
+
+        const usernameStr = username ? `@${username}` : `ID: ${chatId}`;
+        const orderNumber = await getAndIncrementOrderCounter(env);
+        const deliveryInfo = deliveryType || '';
+        const summaryText =
+          `  🔥  <b>ЗАКАЗ №${orderNumber} НА ВЫКУП</b>\n` +
+          `  👤  Клиент: ${usernameStr}\n` +
+          `  💵  Сумма: <b>${totalRub} ₽</b> (${totalYuan.toFixed(2)} ¥)\n` +
+          `  📦  Товаров: ${items.length}` +
+          (deliveryInfo ? `\n  🚚  Доставка: ${deliveryInfo}` : '');
+
+        const ts = timestamp || Date.now();
+        const orderId = `${chatId}_${ts}`;
+        const orderData = {
+          clientId: chatId,
+          orderNumber,
+          orderPaid: false,
+          deliveryPaid: false,
+          deliveryAmount: null,
+          summaryText,
+          totalRub,
+          pinnedMsgId: null,
+          createdAt: ts
+        };
+
+        const dest = topicId
+          ? { chat_id: groupId, message_thread_id: topicId }
+          : { chat_id: Number(env.MANAGER_ID) };
+
+        const statusText = buildOrderStatus(orderData);
+        const keyboard = buildOrderKeyboard(orderId, orderData);
+
+        const sent = await sendWithRetry(env, 'sendMessage', {
+          ...dest,
+          text: summaryText + statusText,
+          parse_mode: 'HTML',
+          reply_markup: keyboard
+        });
+
+        if (sent?.result?.message_id) {
+          orderData.pinnedMsgId = sent.result.message_id;
+          if (topicId) {
+            await callTelegram(env, 'pinChatMessage', {
+              chat_id: groupId,
+              message_id: sent.result.message_id,
+              disable_notification: true
+            });
           }
         }
-        if (!orderData && orderId) {
-          foundKey = `order_${orderId}`;
-          const stored = await env.CLIENTS.get(foundKey);
-          if (stored) orderData = JSON.parse(stored);
-        }
-        if (!orderData || Number(orderData.clientId) !== Number(clientId)) {
-          return jsonResponse({ ok: false, error: 'Order not found or access denied' }, 404);
-        }
-        if (type === 'order') {
-          orderData.orderPaid = true;
-        } else {
-          if (!orderData.deliveryAmount) return jsonResponse({ ok: false, error: 'Delivery amount not set' }, 400);
-          orderData.deliveryPaid = true;
-        }
-        await env.CLIENTS.put(foundKey, JSON.stringify(orderData));
 
-        const groupId = getGroupId(env);
-        const topicId = await getOrCreateTopic(env, Number(clientId), { id: clientId, first_name: 'Клиент' });
-        if (topicId && groupId) {
-          const typeText = type === 'order' ? 'заказа' : 'доставки';
-          let text = `✅ Клиент отметил оплату ${typeText} по заказу №${orderData.orderNumber}`;
-          if (screenshotUrl) text += `\n\n📎 Скриншот: ${screenshotUrl}`;
-          await callTelegram(env, 'sendMessage', {
-            chat_id: groupId,
-            message_thread_id: topicId,
-            text,
-            disable_web_page_preview: !screenshotUrl
-          });
+        await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+        await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
+
+        for (let idx = 0; idx < items.length; idx++) {
+          const item = items[idx];
+          const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
+          const resRub = calcRub(item.price ?? resYuan, isWhite);
+          const link = item.link || 'Не указана';
+          const textMsg =
+            `  📍  <b>ТОВАР №${idx + 1}</b>\n` +
+            `  🔗  ${link}\n` +
+            `  💰  Цена: ${item.price ?? '—'} ¥\n` +
+            `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
+          const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
+
+          if (imgUrls.length) {
+            const batchSize = 9;
+            for (let start = 0; start < imgUrls.length; start += batchSize) {
+              const batch = imgUrls.slice(start, start + batchSize);
+              const media = batch.map((u, i) => {
+                if (start === 0 && i === 0) return { type: 'photo', media: u, caption: textMsg, parse_mode: 'HTML' };
+                return { type: 'photo', media: u };
+              });
+              try {
+                await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
+              } catch (err) {
+                await sendWithRetry(env, 'sendMessage', { ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true });
+                for (const u of batch) {
+                  try { await sendWithRetry(env, 'sendPhoto', { ...dest, photo: u }); }
+                  catch (_) { await callTelegram(env, 'sendMessage', { ...dest, text: `📸 <a href="${u}">Фото</a>`, parse_mode: 'HTML' }); }
+                }
+              }
+            }
+          } else {
+            await sendWithRetry(env, 'sendMessage', { ...dest, text: `${textMsg}\n  📸  Фото: Нет`, parse_mode: 'HTML', disable_web_page_preview: true });
+          }
         }
-        await updateClientStatusMsg(env, orderData, foundKey);
-        return jsonResponse({ ok: true });
+
+        await callTelegram(env, 'sendMessage', {
+          chat_id: chatId,
+          text: `  ✅  <b>Ваш заказ №${orderNumber} успешно принят!</b>\n\nМенеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.`,
+          parse_mode: 'HTML'
+        });
+
+        const clientStatusText = buildClientStatusText(orderData);
+        const clientStatusSent = await callTelegram(env, 'sendMessage', {
+          chat_id: chatId,
+          text: clientStatusText,
+          parse_mode: 'HTML'
+        });
+        if (clientStatusSent?.result?.message_id) {
+          orderData.clientStatusMsgId = clientStatusSent.result.message_id;
+          await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+        }
+
+        await addToBroadcastList(env, chatId);
+        return jsonResponse({ ok: true, orderId, orderNumber });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
       }
@@ -211,7 +288,8 @@ export default {
                 totalRub: od.totalRub || 0,
                 orderPaid: od.orderPaid || false,
                 deliveryPaid: od.deliveryPaid || false,
-                deliveryAmount: od.deliveryAmount || null
+                deliveryAmount: od.deliveryAmount || null,
+                timestamp: od.createdAt || null
               });
             }
           } catch (_) {}
