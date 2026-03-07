@@ -509,6 +509,7 @@
         const RATE_MULTIPLIER = 13; 
         const ORDER_HELP_URL = 'https://telegra.ph/Kak-i-zachem-sozdavat-Kitajskij-nomer-09-02'; 
         const ORDER_STATUS_URL = 'https://nwsnumbot.krivetkagames.workers.dev/order-status';
+        const ORDERS_URL = 'https://nwsnumbot.krivetkagames.workers.dev/orders';
         
         let currentTab = 'calc';
         let orderItems = [];
@@ -706,8 +707,12 @@
 
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
-            if (item.orderId) {
-                const status = await fetchOrderStatus(item.orderId);
+            if (item.title === 'Заказ на выкуп') {
+                let status = item.orderId ? await fetchOrderStatus(item.orderId) : null;
+                if (!status) {
+                    const orders = await fetchOrdersForClient();
+                    if (item.totalRub) status = matchOrderByTotalRub(orders, item.totalRub);
+                }
                 const formatted = formatOrderStatus(status);
                 orderStatusText = formatted.order;
                 deliveryStatusText = formatted.delivery;
@@ -971,6 +976,7 @@
                     date: new Date().toLocaleString('ru-RU'),
                     delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
                     price: priceHtml,
+                    totalRub,
                     itemsData: orderItems,
                     images: historyImages,
                     orderId,
@@ -1110,6 +1116,23 @@
             } catch (e) { return null; }
         }
 
+        async function fetchOrdersForClient() {
+            const userId = tg.initDataUnsafe?.user?.id;
+            if (!userId) return [];
+            try {
+                const res = await fetch(`${ORDERS_URL}?clientId=${encodeURIComponent(userId)}`);
+                const data = await res.json();
+                return data.ok && Array.isArray(data.orders) ? data.orders : [];
+            } catch (e) { return []; }
+        }
+
+        function matchOrderByTotalRub(orders, totalRub) {
+            if (!totalRub || !orders.length) return null;
+            const rub = typeof totalRub === 'number' ? totalRub : parseInt(String(totalRub).replace(/\s/g, ''), 10);
+            if (isNaN(rub)) return null;
+            return orders.find(o => o.totalRub === rub) || orders.find(o => Math.abs(o.totalRub - rub) < 10);
+        }
+
         function formatOrderStatus(status) {
             if (!status) return { order: '🔴 Заказ: Не оплачен', delivery: '🔴 Доставка: Счёт не выставлен' };
             const order = status.orderPaid ? '🟢 Заказ: Оплачен' : '🔴 Заказ: Не оплачен';
@@ -1132,12 +1155,21 @@
             
             if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
             
+            const hasOrders = history.some(h => h.title === 'Заказ на выкуп');
+            const allOrders = hasOrders ? await fetchOrdersForClient() : [];
             for (let index = 0; index < history.length; index++) {
                 const item = history[index];
                 let orderStatusText = item.orderStatus || '';
                 let deliveryStatusText = item.deliveryStatus || '';
-                if (item.orderId) {
-                    const status = await fetchOrderStatus(item.orderId);
+                if (item.title === 'Заказ на выкуп') {
+                    let status = null;
+                    if (item.orderId) {
+                        status = await fetchOrderStatus(item.orderId);
+                    }
+                    if (!status && allOrders.length > 0 && item.totalRub) {
+                        const matched = matchOrderByTotalRub(allOrders, item.totalRub);
+                        if (matched) status = matched;
+                    }
                     const formatted = formatOrderStatus(status);
                     orderStatusText = formatted.order;
                     deliveryStatusText = formatted.delivery;
