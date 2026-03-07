@@ -711,18 +711,22 @@
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
             if (item.title === 'Заказ на выкуп') {
-                let status = item.orderId ? await fetchOrderStatus(item.orderId) : null;
+                let status = item.orderNumber ? await fetchOrderStatus(null, item.orderNumber) : null;
+                if (!status && item.orderId) status = await fetchOrderStatus(item.orderId);
                 if (!status) {
                     const orders = await fetchOrdersForClient();
                     const totalRub = parseTotalRubFromItem(item);
-                    if (totalRub) status = matchOrderByTotalRub(orders, totalRub);
+                    if (totalRub) {
+                        status = matchOrderByTotalRub(orders, totalRub);
+                        if (status) item.orderNumber = status.orderNumber;
+                    }
                 }
                 const formatted = formatOrderStatus(status);
                 orderStatusText = formatted.order;
                 deliveryStatusText = formatted.delivery;
             }
 
-            document.getElementById('detailTitle').innerText = item.title;
+            document.getElementById('detailTitle').innerText = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : item.title;
             document.getElementById('detailDate').innerText = item.date;
             document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
             document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0].trim() : '0 ₽';
@@ -1111,10 +1115,11 @@
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
-        async function fetchOrderStatus(orderId) {
-            if (!orderId) return null;
+        async function fetchOrderStatus(orderId, orderNumber) {
+            if (!orderId && !orderNumber) return null;
             try {
-                const res = await fetch(`${ORDER_STATUS_URL}?orderId=${encodeURIComponent(orderId)}`);
+                const param = orderNumber ? `orderNumber=${encodeURIComponent(orderNumber)}` : `orderId=${encodeURIComponent(orderId)}`;
+                const res = await fetch(`${ORDER_STATUS_URL}?${param}`);
                 const data = await res.json();
                 return data.ok ? data : null;
             } catch (e) { return null; }
@@ -1182,19 +1187,30 @@
             
             const hasOrders = history.some(h => h.title === 'Заказ на выкуп');
             const allOrders = hasOrders ? await fetchOrdersForClient() : [];
-            for (let index = 0; index < history.length; index++) {
-                const item = history[index];
+            const index = await getHistoryIndex();
+            for (let i = 0; i < history.length; i++) {
+                const item = history[i];
+                const storageKey = index[i];
                 let orderStatusText = item.orderStatus || '';
                 let deliveryStatusText = item.deliveryStatus || '';
                 if (item.title === 'Заказ на выкуп') {
                     let status = null;
-                    if (item.orderId) {
+                    if (item.orderNumber) {
+                        status = await fetchOrderStatus(null, item.orderNumber);
+                    }
+                    if (!status && item.orderId) {
                         status = await fetchOrderStatus(item.orderId);
                     }
                     const totalRub = parseTotalRubFromItem(item);
                     if (!status && allOrders.length > 0 && totalRub) {
                         const matched = matchOrderByTotalRub(allOrders, totalRub);
-                        if (matched) status = matched;
+                        if (matched) {
+                            status = matched;
+                            item.orderNumber = matched.orderNumber;
+                            if (storageKey && item.orderNumber) {
+                                await cloudStorage.setItem(storageKey, JSON.stringify(item));
+                            }
+                        }
                     }
                     const formatted = formatOrderStatus(status);
                     orderStatusText = formatted.order;
@@ -1217,9 +1233,10 @@
                        </div>`
                     : '';
 
+                const titleDisplay = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : item.title;
                 const html = `
-                    <div class="history-item" onclick="openHistoryDetails(${index})">
-                        <div class="history-header"><span class="history-type">${item.title}</span><span class="history-date">${item.date}</span></div>
+                    <div class="history-item" onclick="openHistoryDetails(${i})">
+                        <div class="history-header"><span class="history-type">${titleDisplay}</span><span class="history-date">${item.date}</span></div>
                         <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
                         ${statusHtml}
                         ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
