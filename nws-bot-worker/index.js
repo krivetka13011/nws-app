@@ -979,12 +979,16 @@ async function handleStart(env, chatId, from) {
     '(расчеты смотрите на сайте Транспортной компании)\n\n' +
     'Связь @Krivetka1301';
 
+  const appUrl = env.APP_URL.includes('?')
+    ? `${env.APP_URL}&uid=${chatId}`
+    : `${env.APP_URL}?uid=${chatId}`;
+
   const keyboard = {
     keyboard: [
       [
         {
           text: ' 📦  Приложение',
-          web_app: { url: env.APP_URL }
+          web_app: { url: appUrl }
         }
       ]
     ],
