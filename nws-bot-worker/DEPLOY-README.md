@@ -1,33 +1,37 @@
-# Деплой Worker при ошибке "fetch failed"
+# Деплой Worker
 
-## Проблема
-`npx wrangler deploy` падает с `fetch failed` — часто из-за VPN, firewall или провайдера.
+## Токен
+Токен хранится в `.env.deploy` (не в git). Для деплоя используется он.
 
-## Решения
+## Способы деплоя
 
-### 1. Отключить VPN
-Если включен VPN — отключите и повторите `npx wrangler deploy`.
+### 1. GitHub Actions (рекомендуется при проблемах с сетью)
 
-### 2. Другой DNS
-Попробуйте DNS 1.1.1.1 (Cloudflare) или 8.8.8.8 (Google).
+1. Добавьте секрет в репозиторий:
+   - https://github.com/krivetka13011/nws-app/settings/secrets/actions
+   - New repository secret
+   - Name: `CLOUDFLARE_API_TOKEN`
+   - Value: токен из `.env.deploy`
 
-### 3. Деплой через REST API (curl)
+2. Запуск: Actions → Deploy Worker → Run workflow  
+   Или при push в `nws-bot-worker/index.js` деплой запустится автоматически.
 
-**Создайте API Token:**
-1. https://dash.cloudflare.com/profile/api-tokens
-2. Create Token → Edit Cloudflare Workers
-3. Или Custom: права **Workers Scripts: Edit**, **Workers KV Storage: Edit**
+### 2. Локально: deploy-curl.ps1
 
-**Запуск:**
 ```powershell
 cd "c:\Users\User\Downloads\tg bot cursor\nws-bot-worker"
-$env:CLOUDFLARE_API_TOKEN = "ваш_токен"
 .\deploy-curl.ps1
 ```
 
-### 4. Деплой с другого компьютера/сети
-Скопируйте папку `nws-bot-worker` на другой ПК или используйте мобильный интернет и выполните `npx wrangler deploy` там.
+Токен берётся из `.env.deploy` или `$env:CLOUDFLARE_API_TOKEN`.
 
-### 5. Cloudflare Dashboard
-Зайдите в https://dash.cloudflare.com → Workers & Pages → nwsnumbot → Quick Edit. Вставьте код из `index.js` и Save and Deploy.  
-**Важно:** в Settings добавьте KV namespaces (CLIENTS, ORDERS_KV) и переменные (MANAGER_ID, APP_URL и т.д.).
+### 3. wrangler deploy
+
+```powershell
+cd "c:\Users\User\Downloads\tg bot cursor\nws-bot-worker"
+$env:CLOUDFLARE_API_TOKEN = (Get-Content .env.deploy | Select-String "CLOUDFLARE_API_TOKEN=(.+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+npx wrangler deploy
+```
+
+### 4. При ошибке "fetch failed"
+Отключите VPN, смените DNS на 1.1.1.1, попробуйте мобильный интернет или используйте GitHub Actions.
