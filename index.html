@@ -893,16 +893,21 @@
                 const userId = tg.initDataUnsafe?.user?.id;
                 const user = tg.initDataUnsafe?.user || {};
 
+                const btn = document.getElementById('btn-action-order');
+                const originalText = btn.innerHTML;
+
                 if (userId) {
-                    const btn = document.getElementById('btn-action-order');
-                    const originalText = btn.innerHTML;
                     btn.disabled = true;
                     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...';
 
                     try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
                         const res = await fetch(`${WORKER_URL}/api/create-order`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
+                            signal: controller.signal,
                             body: JSON.stringify({
                                 userId,
                                 username: user.username || '',
@@ -913,6 +918,7 @@
                                 timestamp: orderTs
                             })
                         });
+                        clearTimeout(timeoutId);
                         const data = await res.json();
                         if (!data.ok) {
                             btn.disabled = false;
@@ -948,6 +954,8 @@
                     }
                 }
 
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...';
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
                 const orderId = `${userId || 0}_${orderTs}`;

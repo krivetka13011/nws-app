@@ -72,6 +72,7 @@ export default {
     }
 
     // POST /api/create-order — создание заказа через API (Вариант А)
+    // Быстрый ответ + фоновая обработка через ctx.waitUntil()
     if (request.method === 'POST' && url.pathname === '/api/create-order') {
       if (!env.CLIENTS) return jsonResponse({ ok: false, error: 'Not configured' }, 500);
       let body;
@@ -88,8 +89,6 @@ export default {
         const chatId = Number(userId);
         const isWhite = /белая|white/i.test(deliveryType || '');
         const user = { id: chatId, username, first_name: firstName, last_name: lastName };
-        const topicId = await getOrCreateTopic(env, chatId, user);
-        const groupId = getGroupId(env);
 
         const totalRub = items.reduce((sum, it) => sum + calcRub(it.price ?? it.resYuan ?? 0, isWhite), 0);
         const totalYuan = items.reduce((sum, it) => {
@@ -121,87 +120,12 @@ export default {
           createdAt: ts
         };
 
-        const dest = topicId
-          ? { chat_id: groupId, message_thread_id: topicId }
-          : { chat_id: Number(env.MANAGER_ID) };
-
-        const statusText = buildOrderStatus(orderData);
-        const keyboard = buildOrderKeyboard(orderId, orderData);
-
-        const sent = await sendWithRetry(env, 'sendMessage', {
-          ...dest,
-          text: summaryText + statusText,
-          parse_mode: 'HTML',
-          reply_markup: keyboard
-        });
-
-        if (sent?.result?.message_id) {
-          orderData.pinnedMsgId = sent.result.message_id;
-          if (topicId) {
-            await callTelegram(env, 'pinChatMessage', {
-              chat_id: groupId,
-              message_id: sent.result.message_id,
-              disable_notification: true
-            });
-          }
-        }
-
         await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
         await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
 
-        for (let idx = 0; idx < items.length; idx++) {
-          const item = items[idx];
-          const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
-          const resRub = calcRub(item.price ?? resYuan, isWhite);
-          const link = item.link || 'Не указана';
-          const textMsg =
-            `  📍  <b>ТОВАР №${idx + 1}</b>\n` +
-            `  🔗  ${link}\n` +
-            `  💰  Цена: ${item.price ?? '—'} ¥\n` +
-            `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
-          const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
+        // Telegram API вызовы — в фоне, чтобы не блокировать ответ клиенту
+        ctx.waitUntil(processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo));
 
-          if (imgUrls.length) {
-            const batchSize = 9;
-            for (let start = 0; start < imgUrls.length; start += batchSize) {
-              const batch = imgUrls.slice(start, start + batchSize);
-              const media = batch.map((u, i) => {
-                if (start === 0 && i === 0) return { type: 'photo', media: u, caption: textMsg, parse_mode: 'HTML' };
-                return { type: 'photo', media: u };
-              });
-              try {
-                await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
-              } catch (err) {
-                await sendWithRetry(env, 'sendMessage', { ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true });
-                for (const u of batch) {
-                  try { await sendWithRetry(env, 'sendPhoto', { ...dest, photo: u }); }
-                  catch (_) { await callTelegram(env, 'sendMessage', { ...dest, text: `📸 <a href="${u}">Фото</a>`, parse_mode: 'HTML' }); }
-                }
-              }
-            }
-          } else {
-            await sendWithRetry(env, 'sendMessage', { ...dest, text: `${textMsg}\n  📸  Фото: Нет`, parse_mode: 'HTML', disable_web_page_preview: true });
-          }
-        }
-
-        await callTelegram(env, 'sendMessage', {
-          chat_id: chatId,
-          text: `  ✅  <b>Ваш заказ №${orderNumber} успешно принят!</b>\n\nМенеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.`,
-          parse_mode: 'HTML'
-        });
-
-        const clientStatusText = buildClientStatusText(orderData);
-        const clientStatusSent = await callTelegram(env, 'sendMessage', {
-          chat_id: chatId,
-          text: clientStatusText,
-          parse_mode: 'HTML'
-        });
-        if (clientStatusSent?.result?.message_id) {
-          orderData.clientStatusMsgId = clientStatusSent.result.message_id;
-          await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
-        }
-
-        await addToBroadcastList(env, chatId);
         return jsonResponse({ ok: true, orderId, orderNumber });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
@@ -361,6 +285,98 @@ export default {
     return new Response('Not found', { status: 404, headers: CORS_HEADERS });
   }
 };
+
+// ===== Background order processing (called via ctx.waitUntil) =====
+
+async function processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo) {
+  try {
+    const chatId = orderData.clientId;
+    const topicId = await getOrCreateTopic(env, chatId, user);
+    const groupId = getGroupId(env);
+
+    const dest = topicId
+      ? { chat_id: groupId, message_thread_id: topicId }
+      : { chat_id: Number(env.MANAGER_ID) };
+
+    const statusText = buildOrderStatus(orderData);
+    const keyboard = buildOrderKeyboard(orderId, orderData);
+
+    const sent = await sendWithRetry(env, 'sendMessage', {
+      ...dest,
+      text: orderData.summaryText + statusText,
+      parse_mode: 'HTML',
+      reply_markup: keyboard
+    });
+
+    if (sent?.result?.message_id) {
+      orderData.pinnedMsgId = sent.result.message_id;
+      if (topicId) {
+        await callTelegram(env, 'pinChatMessage', {
+          chat_id: groupId,
+          message_id: sent.result.message_id,
+          disable_notification: true
+        });
+      }
+    }
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
+      const resRub = calcRub(item.price ?? resYuan, isWhite);
+      const link = item.link || 'Не указана';
+      const textMsg =
+        `  📍  <b>ТОВАР №${idx + 1}</b>\n` +
+        `  🔗  ${link}\n` +
+        `  💰  Цена: ${item.price ?? '—'} ¥\n` +
+        `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
+      const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
+
+      if (imgUrls.length) {
+        const batchSize = 9;
+        for (let start = 0; start < imgUrls.length; start += batchSize) {
+          const batch = imgUrls.slice(start, start + batchSize);
+          const media = batch.map((u, i) => {
+            if (start === 0 && i === 0) return { type: 'photo', media: u, caption: textMsg, parse_mode: 'HTML' };
+            return { type: 'photo', media: u };
+          });
+          try {
+            await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
+          } catch (err) {
+            await sendWithRetry(env, 'sendMessage', { ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true });
+            for (const u of batch) {
+              try { await sendWithRetry(env, 'sendPhoto', { ...dest, photo: u }); }
+              catch (_) { await callTelegram(env, 'sendMessage', { ...dest, text: `📸 <a href="${u}">Фото</a>`, parse_mode: 'HTML' }); }
+            }
+          }
+        }
+      } else {
+        await sendWithRetry(env, 'sendMessage', { ...dest, text: `${textMsg}\n  📸  Фото: Нет`, parse_mode: 'HTML', disable_web_page_preview: true });
+      }
+    }
+
+    await callTelegram(env, 'sendMessage', {
+      chat_id: chatId,
+      text: `  ✅  <b>Ваш заказ №${orderData.orderNumber} успешно принят!</b>\n\nМенеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.`,
+      parse_mode: 'HTML'
+    });
+
+    const clientStatusText = buildClientStatusText(orderData);
+    const clientStatusSent = await callTelegram(env, 'sendMessage', {
+      chat_id: chatId,
+      text: clientStatusText,
+      parse_mode: 'HTML'
+    });
+    if (clientStatusSent?.result?.message_id) {
+      orderData.clientStatusMsgId = clientStatusSent.result.message_id;
+    }
+
+    // Обновить KV с pinnedMsgId и clientStatusMsgId
+    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+    await addToBroadcastList(env, chatId);
+  } catch (e) {
+    console.error('processCreateOrder background error:', e);
+  }
+}
 
 // ===== Telegram helpers =====
 
