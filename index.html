@@ -434,7 +434,10 @@
 
     <!-- TAB 4: HISTORY -->
     <div id="tab-history" class="tab-content">
-        <h2 class="text-3xl font-bold mb-6 px-2 text-white">История</h2>
+        <div class="flex items-center justify-between mb-6 px-2">
+            <h2 class="text-3xl font-bold text-white">История</h2>
+            <button onclick="clearHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Очистить</button>
+        </div>
         <div id="historyList" class="space-y-4"></div>
         <div class="scroll-spacer"></div>
     </div>
@@ -711,7 +714,8 @@
                 let status = item.orderId ? await fetchOrderStatus(item.orderId) : null;
                 if (!status) {
                     const orders = await fetchOrdersForClient();
-                    if (item.totalRub) status = matchOrderByTotalRub(orders, item.totalRub);
+                    const totalRub = parseTotalRubFromItem(item);
+                    if (totalRub) status = matchOrderByTotalRub(orders, totalRub);
                 }
                 const formatted = formatOrderStatus(status);
                 orderStatusText = formatted.order;
@@ -1116,6 +1120,19 @@
             } catch (e) { return null; }
         }
 
+        async function clearHistory() {
+            if (!confirm('Очистить всю историю заказов?')) return;
+            try {
+                const index = await getHistoryIndex();
+                for (const key of index) {
+                    await cloudStorage.removeItem(key);
+                }
+                await cloudStorage.setItem('nws_history_idx', '[]');
+                await cloudStorage.setItem('nws_history', '[]');
+                renderHistory();
+            } catch (e) { console.error(e); }
+        }
+
         async function fetchOrdersForClient() {
             const userId = tg.initDataUnsafe?.user?.id;
             if (!userId) return [];
@@ -1126,11 +1143,19 @@
             } catch (e) { return []; }
         }
 
+        function parseTotalRubFromItem(item) {
+            if (item.totalRub) return item.totalRub;
+            if (!item.price) return null;
+            const str = String(item.price).replace(/<[^>]*>/g, ' ');
+            const match = str.match(/(\d[\d\s]*)\s*₽/);
+            return match ? parseInt(match[1].replace(/\s/g, ''), 10) : null;
+        }
+
         function matchOrderByTotalRub(orders, totalRub) {
-            if (!totalRub || !orders.length) return null;
+            if (!orders.length) return null;
             const rub = typeof totalRub === 'number' ? totalRub : parseInt(String(totalRub).replace(/\s/g, ''), 10);
             if (isNaN(rub)) return null;
-            return orders.find(o => o.totalRub === rub) || orders.find(o => Math.abs(o.totalRub - rub) < 10);
+            return orders.find(o => o.totalRub === rub) || orders.find(o => Math.abs((o.totalRub || 0) - rub) < 10);
         }
 
         function formatOrderStatus(status) {
@@ -1166,8 +1191,9 @@
                     if (item.orderId) {
                         status = await fetchOrderStatus(item.orderId);
                     }
-                    if (!status && allOrders.length > 0 && item.totalRub) {
-                        const matched = matchOrderByTotalRub(allOrders, item.totalRub);
+                    const totalRub = parseTotalRubFromItem(item);
+                    if (!status && allOrders.length > 0 && totalRub) {
+                        const matched = matchOrderByTotalRub(allOrders, totalRub);
                         if (matched) status = matched;
                     }
                     const formatted = formatOrderStatus(status);
