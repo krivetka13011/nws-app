@@ -257,6 +257,27 @@ export default {
     if (request.method === 'GET' && url.pathname === '/debug-order') {
       const orderId = url.searchParams.get('orderId');
       if (!orderId || !env.CLIENTS) return jsonResponse({ error: 'orderId required' }, 400);
+
+      // cleanup=1 удаляет stale данные
+      if (url.searchParams.get('cleanup') === '1') {
+        const clientId = orderId.split('_')[0];
+        await env.CLIENTS.delete(`pending_items_${orderId}`);
+        await env.CLIENTS.delete(`pending_job_${orderId}`);
+        await env.CLIENTS.delete(`order_lock_${clientId}`);
+        await env.CLIENTS.delete(`order_queue_${clientId}`);
+        return jsonResponse({ cleaned: true, orderId });
+      }
+
+      // retry=1 перезапускает batch обработку
+      if (url.searchParams.get('retry') === '1') {
+        const pendingRaw = await env.CLIENTS.get(`pending_items_${orderId}`);
+        if (pendingRaw) {
+          triggerBatch(url.origin, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+          return jsonResponse({ retryTriggered: true, orderId });
+        }
+        return jsonResponse({ retryTriggered: false, reason: 'no pending items' });
+      }
+
       const orderRaw = await env.CLIENTS.get(`order_${orderId}`);
       const pendingRaw = await env.CLIENTS.get(`pending_items_${orderId}`);
       const clientId = orderId.split('_')[0];
@@ -423,56 +444,66 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 const BATCH_SIZE = 4;
 
-async function triggerBatch(workerUrl, secret, payload) {
-  try {
-    await fetch(`${workerUrl}/internal/process-batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Secret': secret },
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {
-    console.error('triggerBatch fetch error:', e);
-  }
+function triggerBatch(workerUrl, secret, payload) {
+  const url = `${workerUrl}/internal/process-batch`;
+  console.log('triggerBatch:', url, JSON.stringify(payload));
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Secret': secret },
+    body: JSON.stringify(payload)
+  }).then(r => console.log('triggerBatch response:', r.status))
+    .catch(e => console.error('triggerBatch error:', e));
 }
 
 async function processBatch(env, body, workerUrl) {
-  const { orderId, startIdx } = body;
-  const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-  if (!raw) return;
+  try {
+    const { orderId, startIdx } = body;
+    const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    if (!raw) { console.log('processBatch: no pending items for', orderId); return; }
 
-  const job = JSON.parse(raw);
-  const { type, items, dest, clientId } = job;
-  const end = Math.min(startIdx + BATCH_SIZE, items.length);
+    const job = JSON.parse(raw);
+    const { type, items, dest, clientId } = job;
+    const end = Math.min(startIdx + BATCH_SIZE, items.length);
+    console.log(`processBatch: ${orderId} items[${startIdx}..${end - 1}] of ${items.length}`);
 
-  for (let idx = startIdx; idx < end; idx++) {
-    if (idx > startIdx) await sleep(300);
-
-    if (type === 'order') {
-      await sendOrderItem(env, items[idx], idx, dest, job.isWhite);
-    } else {
-      await sendSearchItem(env, items[idx], idx, dest);
+    for (let idx = startIdx; idx < end; idx++) {
+      if (idx > startIdx) await sleep(300);
+      try {
+        if (type === 'order') {
+          await sendOrderItem(env, items[idx], idx, dest, job.isWhite);
+        } else {
+          await sendSearchItem(env, items[idx], idx, dest);
+        }
+      } catch (itemErr) {
+        console.error(`processBatch item ${idx} error:`, itemErr);
+      }
     }
+
+    if (end < items.length) {
+      triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: end });
+      return;
+    }
+
+    await env.CLIENTS.delete(`pending_items_${orderId}`);
+
+    try {
+      if (type === 'order') {
+        await finishOrder(env, job);
+      } else {
+        await sendWithRetry(env, 'sendMessage', {
+          chat_id: clientId,
+          text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+          parse_mode: 'HTML'
+        });
+      }
+    } catch (finishErr) {
+      console.error('processBatch finishOrder error:', finishErr);
+    }
+
+    await releaseOrderLock(env, clientId, workerUrl);
+  } catch (e) {
+    console.error('processBatch fatal error:', e);
   }
-
-  if (end < items.length) {
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: end });
-    return;
-  }
-
-  // Все товары отправлены — финализация
-  await env.CLIENTS.delete(`pending_items_${orderId}`);
-
-  if (type === 'order') {
-    await finishOrder(env, job);
-  } else {
-    await sendWithRetry(env, 'sendMessage', {
-      chat_id: clientId,
-      text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
-      parse_mode: 'HTML'
-    });
-  }
-
-  await releaseOrderLock(env, clientId, workerUrl);
 }
 
 async function sendOrderItem(env, item, idx, dest, isWhite) {
@@ -507,10 +538,10 @@ async function sendItemMedia(env, item, textMsg, dest) {
     return;
   }
 
-  const batchSize = 9;
-  for (let start = 0; start < imgUrls.length; start += batchSize) {
+  const mediaBatchSize = 9;
+  for (let start = 0; start < imgUrls.length; start += mediaBatchSize) {
     if (start > 0) await sleep(300);
-    const batch = imgUrls.slice(start, start + batchSize);
+    const batch = imgUrls.slice(start, start + mediaBatchSize);
     const media = batch.map((url, i) => {
       if (start === 0 && i === 0) {
         return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
@@ -519,20 +550,28 @@ async function sendItemMedia(env, item, textMsg, dest) {
     });
 
     try {
-      await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
+      const result = await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
+      if (result?.ok) continue;
     } catch (err) {
       console.error('sendMediaGroup error:', err);
+    }
+
+    // Fallback: text + individual photos
+    try {
       await sendWithRetry(env, 'sendMessage', {
         ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true
       });
-      for (const url of batch) {
+    } catch (_) {}
+
+    for (const photoUrl of batch) {
+      try {
+        await callTelegram(env, 'sendPhoto', { ...dest, photo: photoUrl });
+      } catch (_) {
         try {
-          await sendWithRetry(env, 'sendPhoto', { ...dest, photo: url });
-        } catch (_) {
           await callTelegram(env, 'sendMessage', {
-            ...dest, text: `📸 <a href="${url}">Фото</a>`, parse_mode: 'HTML'
+            ...dest, text: `📸 <a href="${photoUrl}">Фото</a>`, parse_mode: 'HTML'
           });
-        }
+        } catch (__) {}
       }
     }
   }
