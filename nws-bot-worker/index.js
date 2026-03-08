@@ -813,6 +813,15 @@ async function handleUpdate(update, env) {
   const msg = update.message;
   if (!msg) return;
 
+  // Удаляем системные уведомления о закреплённых сообщениях
+  if (msg.pinned_message) {
+    await callTelegram(env, 'deleteMessage', {
+      chat_id: msg.chat.id,
+      message_id: msg.message_id
+    }).catch(() => {});
+    return;
+  }
+
   const chatId = msg.chat.id;
   const groupId = getGroupId(env);
   const isFromGroup = msg.chat.type === 'supergroup' && groupId && Number(msg.chat.id) === Number(groupId);
@@ -882,18 +891,23 @@ async function handleUpdate(update, env) {
     return;
   }
 
-  // Обычное сообщение от клиента → переслать в тему
+  // Обычное сообщение от клиента → переслать в тему + реакция OK
   const topicId = await getOrCreateTopic(env, chatId, msg.from);
   if (topicId) {
     await forwardClientMessageToTopic(env, msg, topicId);
   } else {
-    // Fallback: отправить менеджеру в личку
     await callTelegram(env, 'forwardMessage', {
       chat_id: Number(env.MANAGER_ID),
       from_chat_id: chatId,
       message_id: msg.message_id
     });
   }
+
+  await callTelegram(env, 'setMessageReaction', {
+    chat_id: chatId,
+    message_id: msg.message_id,
+    reaction: [{ type: 'emoji', emoji: '👌' }]
+  });
 }
 
 async function forwardClientMessageToTopic(env, msg, topicId) {
@@ -970,13 +984,14 @@ async function handleStart(env, chatId, from) {
   const topicId = await getOrCreateTopic(env, chatId, from);
 
   const text =
-    ' 🌊  Приветствуем в NWS LOGISTICS!\n\n' +
+    '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
     ' ⬇️  Используйте кнопку ниже чтобы открыть приложение.\n\n' +
     ' ✅️  В этом телеграм боте вы можете рассчитать стоимость доставки и оформить заказ.\n\n' +
     ' ❗️  Стоимость доставки рассчитывается до Москвы, а далее мы отправим по России, ' +
     'в Беларусь или Казахстан в любой город, любым способом ' +
-    '(расчеты смотрите на сайте Транспортной компании)\n\n' +
-    'Связь @Krivetka1301';
+    '(расчеты смотрите на сайте CDEK или любой другой транспортной компании)\n\n' +
+    '👤 Вопросы, чеки оплаты отправляйте в чат бота❗️\n\n' +
+    '🔗 Для быстрой работы бота используйте VPN';
 
   const appUrl = env.APP_URL.includes('?')
     ? `${env.APP_URL}&uid=${chatId}`
