@@ -306,8 +306,9 @@ export default {
       } catch (_) {}
 
       try {
-        const topicRaw = await env.CLIENTS.get(`topic_${chatId}`);
-        results.topicId = topicRaw;
+        const clientData = await env.CLIENTS.get(`client_${chatId}`);
+        results.clientKV = clientData ? JSON.parse(clientData) : null;
+        results.topicId = results.clientKV?.topicId || null;
       } catch (_) {}
 
       try {
@@ -315,10 +316,27 @@ export default {
           ? { chat_id: Number(groupId), message_thread_id: Number(results.topicId) }
           : { chat_id: Number(chatId) };
         results.dest = dest;
+        results.groupId = groupId;
         const r = await callTelegram(env, 'sendMessage', { ...dest, text: 'Debug test message', parse_mode: 'HTML' });
-        results.sendResult = r;
+        results.sendResult = { ok: r.ok, error_code: r.error_code, description: r.description };
+        if (r.ok) results.sendResult.message_id = r.result.message_id;
       } catch (e) {
         results.sendError = String(e);
+      }
+
+      // Test photo send
+      const testPhoto = url.searchParams.get('photo');
+      if (testPhoto) {
+        try {
+          const dest = results.topicId
+            ? { chat_id: Number(groupId), message_thread_id: Number(results.topicId) }
+            : { chat_id: Number(chatId) };
+          const media = [{ type: 'photo', media: testPhoto, caption: 'Debug photo test' }];
+          const pr = await callTelegram(env, 'sendMediaGroup', { ...dest, media });
+          results.photoResult = { ok: pr.ok, error_code: pr.error_code, description: pr.description };
+        } catch (e) {
+          results.photoError = String(e);
+        }
       }
 
       return jsonResponse(results);
