@@ -428,7 +428,7 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
     bc.push(`topic:${topicId}`);
     const groupId = getGroupId(env);
 
-    const dest = topicId
+    let dest = topicId
       ? { chat_id: groupId, message_thread_id: topicId }
       : { chat_id: Number(env.MANAGER_ID) };
     bc.push(`dest:${JSON.stringify(dest)}`);
