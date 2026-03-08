@@ -284,6 +284,9 @@ export default {
       const lockVal = await env.CLIENTS.get(`order_lock_${clientId}`);
       const queueRaw = await env.CLIENTS.get(`order_queue_${clientId}`);
       const bcRaw = await env.CLIENTS.get(`bc_${orderId}`);
+      const batchReached = await env.CLIENTS.get('_batch_reached');
+      const batchDone = await env.CLIENTS.get('_batch_done');
+      const batchError = await env.CLIENTS.get('_batch_error');
       return jsonResponse({
         orderId,
         orderExists: !!orderRaw,
@@ -292,7 +295,10 @@ export default {
         pendingItemsCount: pendingRaw ? JSON.parse(pendingRaw).items?.length : 0,
         lock: lockVal,
         queue: queueRaw ? JSON.parse(queueRaw) : [],
-        breadcrumbs: bcRaw ? JSON.parse(bcRaw) : null
+        breadcrumbs: bcRaw ? JSON.parse(bcRaw) : null,
+        _batchReached: batchReached ? JSON.parse(batchReached) : null,
+        _batchDone: batchDone ? JSON.parse(batchDone) : null,
+        _batchError: batchError ? JSON.parse(batchError) : null
       });
     }
 
@@ -362,12 +368,16 @@ export default {
       if (secret !== env.WEBHOOK_SECRET) return new Response('Forbidden', { status: 403 });
       let body;
       try { body = await request.json(); } catch (_) { return new Response('Bad', { status: 400 }); }
+      // Debug marker
+      await env.CLIENTS.put('_batch_reached', JSON.stringify({ orderId: body?.orderId, startIdx: body?.startIdx, time: Date.now() }));
       try {
         const nextAction = await processOneBatch(env, body, url.origin);
+        await env.CLIENTS.put('_batch_done', JSON.stringify({ orderId: body?.orderId, startIdx: body?.startIdx, next: nextAction, time: Date.now() }));
         if (nextAction) {
           ctx.waitUntil(triggerBatch(url.origin, env.WEBHOOK_SECRET, nextAction));
         }
       } catch (e) {
+        await env.CLIENTS.put('_batch_error', JSON.stringify({ orderId: body?.orderId, error: String(e), time: Date.now() }));
         console.error('Batch error:', e);
       }
       return new Response('OK', { status: 200 });
