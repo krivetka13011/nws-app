@@ -1,6 +1,6 @@
 name = "nwsnumbot"
 main = "index.js"
-compatibility_date = "2026-03-02"
+compatibility_date = "2026-03-08"
 
 [[kv_namespaces]]
 binding = "CLIENTS"
