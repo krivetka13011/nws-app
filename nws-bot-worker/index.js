@@ -381,10 +381,66 @@ export default {
     }
 
     return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+  },
+
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(processPendingOrdersCron(env));
   }
 };
 
-// ===== Background order processing (called via ctx.waitUntil) =====
+async function processPendingOrdersCron(env) {
+  if (!env.CLIENTS) return;
+  try {
+    const list = await env.CLIENTS.list({ prefix: 'pending_items_' });
+    if (!list.keys.length) return;
+    const key = list.keys[0].name;
+    const orderId = key.replace('pending_items_', '');
+    const raw = await env.CLIENTS.get(key);
+    if (!raw) return;
+    const job = JSON.parse(raw);
+    const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
+    const ITEMS_PER_CALL = 6;
+    const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
+
+    for (let idx = nextIdx; idx < end; idx++) {
+      if (idx > nextIdx) await sleep(300);
+      try {
+        if (job.type === 'order') {
+          await sendOrderItem(env, items[idx], idx, dest, isWhite);
+        } else {
+          await sendSearchItem(env, items[idx], idx, dest);
+        }
+      } catch (e) {
+        console.error('cron item', idx, e);
+      }
+    }
+
+    if (end < items.length) {
+      job.nextIdx = end;
+      await env.CLIENTS.put(key, JSON.stringify(job));
+      return;
+    }
+
+    await env.CLIENTS.delete(key);
+    try {
+      if (job.type === 'order') {
+        await finishOrder(env, job);
+      } else {
+        await sendWithRetry(env, 'sendMessage', {
+          chat_id: clientId,
+          text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+          parse_mode: 'HTML'
+        });
+      }
+    } catch (e) {
+      console.error('cron finish error:', e);
+    }
+    const workerUrl = job.workerUrl || env.WORKER_URL || '';
+    await releaseOrderLock(env, clientId, workerUrl);
+  } catch (e) {
+    console.error('processPendingOrdersCron:', e);
+  }
+}
 
 // ===== Telegram helpers =====
 

@@ -928,7 +928,7 @@
                     userId, username: tg.initDataUnsafe?.user?.username || '',
                     firstName: tg.initDataUnsafe?.user?.first_name || '',
                     lastName: tg.initDataUnsafe?.user?.last_name || '',
-                    items: orderItems.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, imgUrls: i.imgUrls || [] })),
+                    items: orderItems.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, imgUrls: (i.imgUrls || []).slice(0, MAX_PHOTOS_PER_ITEM) })),
                     deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
                     timestamp: orderTs
                 };
@@ -943,33 +943,9 @@
                     const result = await res.json();
                     if (result.ok) {
                         apiOk = true;
-                        const oid = result.orderId;
-
-                        // Poll /api/continue-order until all items processed
-                        if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка товаров...';
-                        let done = false;
-                        while (!done) {
-                            try {
-                                const cr = await fetch(`${WORKER_URL}/api/continue-order`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ orderId: oid })
-                                });
-                                const cResult = await cr.json();
-                                if (cResult.done) {
-                                    done = true;
-                                } else if (cResult.total) {
-                                    const pct = Math.round((cResult.processed / cResult.total) * 100);
-                                    if (btn) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${cResult.processed}/${cResult.total} (${pct}%)`;
-                                }
-                            } catch (pollErr) {
-                                console.error('Poll error:', pollErr);
-                                await new Promise(r => setTimeout(r, 2000));
-                            }
-                        }
-
-                        tg.showAlert('Заказ успешно отправлен!');
-                        setTimeout(() => tg.close(), 1500);
+                        tg.showAlert('Заказ создан! Товары отправляются менеджеру в фоне.');
+                        if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
+                        setTimeout(() => tg.close(), 1200);
                     }
                 } catch (apiErr) {
                     console.error('API error, fallback to sendData:', apiErr);
@@ -977,7 +953,12 @@
 
                 // Fallback to tg.sendData if API failed
                 if (!apiOk) {
-                    const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)', timestamp: orderTs };
+                    const data = {
+                        type: 'order',
+                        items: orderItems.map(i => ({ ...i, imgUrls: (i.imgUrls || []).slice(0, MAX_PHOTOS_PER_ITEM) })),
+                        deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
+                        timestamp: orderTs
+                    };
                     let json = JSON.stringify(data);
                     if (json.length > 4000) {
                         data.items = data.items.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, resRub: i.resRub, imgUrls: (i.imgUrls || []).slice(0, 2) }));
@@ -985,6 +966,7 @@
                         if (json.length > 4000) { data.items = data.items.map(i => ({ ...i, imgUrls: [] })); json = JSON.stringify(data); }
                     }
                     tg.sendData(json);
+                    if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
                 }
             } catch (e) {
                 const btn = document.getElementById('btn-action-order');
@@ -1031,9 +1013,16 @@
             buttons.forEach(btn => { btn.style.display = list.length > 1 ? 'block' : 'none'; });
         }
 
+        const MAX_PHOTOS_PER_ITEM = 9;
+
         async function handleImageUpload(input, id, type) {
             let files = Array.from(input.files); if (!files.length) return;
-            if (files.length >= 10) { alert("Выбрано 10 или более фото. Будут загружены последние 9."); files = files.slice(-9); }
+            const list = type === 'order' ? orderItems : searchItems;
+            const item = list.find(i => i.id === id);
+            const existing = item?.imgUrls?.length || 0;
+            if (existing >= MAX_PHOTOS_PER_ITEM) { alert(`Максимум ${MAX_PHOTOS_PER_ITEM} фото в позиции.`); input.value = ''; return; }
+            const maxNew = MAX_PHOTOS_PER_ITEM - existing;
+            if (files.length > maxNew) { alert(`Максимум ${MAX_PHOTOS_PER_ITEM} фото. Будут добавлены последние ${maxNew}.`); files = files.slice(-maxNew); }
             const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
             const btnLabel = previewArea.querySelector('label');
             for (let i = 0; i < files.length; i++) {

@@ -2,6 +2,9 @@ name = "nwsnumbot"
 main = "index.js"
 compatibility_date = "2026-03-08"
 
+[triggers]
+crons = ["* * * * *"]
+
 [[kv_namespaces]]
 binding = "CLIENTS"
 id = "c638f4e8ab67463c9882857c8b93c063"
@@ -13,6 +16,7 @@ id = "25e034244f544889b450c9993e3c5370"
 [vars]
 MANAGER_ID = 1159166497
 APP_URL = "https://krivetka13011.github.io/nws-app/"
+WORKER_URL = "https://nwsnumbot.krivetkagames.workers.dev"
 WEBHOOK_SECRET = "nws-secret-123"  # можно поменять на любое слово
 # ID закрытой группы с темами (частная — только для менеджеров)
 GROUP_ID = "-1003737384929"
