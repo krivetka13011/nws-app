@@ -362,7 +362,14 @@ export default {
       if (secret !== env.WEBHOOK_SECRET) return new Response('Forbidden', { status: 403 });
       let body;
       try { body = await request.json(); } catch (_) { return new Response('Bad', { status: 400 }); }
-      ctx.waitUntil(processBatch(env, body, url.origin).catch(e => console.error('Batch error:', e)));
+      try {
+        const nextAction = await processOneBatch(env, body, url.origin);
+        if (nextAction) {
+          ctx.waitUntil(triggerBatch(url.origin, env.WEBHOOK_SECRET, nextAction));
+        }
+      } catch (e) {
+        console.error('Batch error:', e);
+      }
       return new Response('OK', { status: 200 });
     }
 
@@ -576,92 +583,78 @@ async function triggerBatch(workerUrl, secret, payload) {
   }
 }
 
-async function processBatch(env, body, workerUrl) {
-  try {
-    const { orderId, startIdx, jobData } = body;
-    let job;
-    if (jobData) {
-      job = jobData;
-      console.log('processBatch: using inline jobData');
-    } else {
-      let raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-      if (!raw) {
-        console.log('processBatch: waiting for KV propagation...');
-        await sleep(3000);
-        raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-      }
-      if (!raw) {
-        await sleep(5000);
-        raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-      }
-      if (!raw) { console.log('processBatch: no pending items for', orderId); return; }
-      job = JSON.parse(raw);
-    }
-    let { type, items, dest, clientId } = job;
-    const end = Math.min(startIdx + BATCH_SIZE, items.length);
-    console.log(`processBatch: ${orderId} items[${startIdx}..${end - 1}] of ${items.length}`);
+// Returns next batch payload or null if done
+async function processOneBatch(env, body, workerUrl) {
+  const { orderId, startIdx, jobData } = body;
+  let job;
+  if (jobData) {
+    job = jobData;
+  } else {
+    let raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    if (!raw) { await sleep(3000); raw = await env.CLIENTS.get(`pending_items_${orderId}`); }
+    if (!raw) { await sleep(5000); raw = await env.CLIENTS.get(`pending_items_${orderId}`); }
+    if (!raw) { console.log('processOneBatch: no pending items for', orderId); return null; }
+    job = JSON.parse(raw);
+  }
 
-    // Probe first: send a test message to check if dest is valid
-    if (startIdx === 0 && dest.message_thread_id) {
-      const probe = await callTelegram(env, 'sendMessage', {
-        ...dest, text: '📦 Загрузка товаров...', parse_mode: 'HTML'
+  let { type, items, dest, clientId } = job;
+  const end = Math.min(startIdx + BATCH_SIZE, items.length);
+  console.log(`processOneBatch: ${orderId} items[${startIdx}..${end - 1}] of ${items.length}`);
+
+  // Probe on first batch: check if dest topic is still valid
+  if (startIdx === 0 && dest.message_thread_id) {
+    const probe = await callTelegram(env, 'sendMessage', {
+      ...dest, text: '📦 Загрузка товаров...', parse_mode: 'HTML'
+    });
+    if (isThreadNotFound(probe)) {
+      const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
+      const groupId = getGroupId(env);
+      dest = newTopicId
+        ? { chat_id: groupId, message_thread_id: newTopicId }
+        : { chat_id: Number(env.MANAGER_ID) };
+      job.dest = dest;
+      await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
+    } else if (probe?.result?.message_id) {
+      await callTelegram(env, 'deleteMessage', {
+        chat_id: dest.chat_id, message_id: probe.result.message_id
       });
-      if (isThreadNotFound(probe)) {
-        console.log('processBatch: stale topic detected, recreating');
-        const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
-        const groupId = getGroupId(env);
-        dest = newTopicId
-          ? { chat_id: groupId, message_thread_id: newTopicId }
-          : { chat_id: Number(env.MANAGER_ID) };
-        // Update stored dest for subsequent batches
-        job.dest = dest;
-        await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
-      } else if (probe?.result?.message_id) {
-        // Delete probe message
-        await callTelegram(env, 'deleteMessage', {
-          chat_id: dest.chat_id, message_id: probe.result.message_id
-        });
-      }
     }
+  }
 
-    for (let idx = startIdx; idx < end; idx++) {
-      if (idx > startIdx) await sleep(300);
-      try {
-        if (type === 'order') {
-          await sendOrderItem(env, items[idx], idx, dest, job.isWhite);
-        } else {
-          await sendSearchItem(env, items[idx], idx, dest);
-        }
-      } catch (itemErr) {
-        console.error(`processBatch item ${idx} error:`, itemErr);
-      }
-    }
-
-    if (end < items.length) {
-      await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: end });
-      return;
-    }
-
-    await env.CLIENTS.delete(`pending_items_${orderId}`);
-
+  for (let idx = startIdx; idx < end; idx++) {
+    if (idx > startIdx) await sleep(300);
     try {
       if (type === 'order') {
-        await finishOrder(env, job);
+        await sendOrderItem(env, items[idx], idx, dest, job.isWhite);
       } else {
-        await sendWithRetry(env, 'sendMessage', {
-          chat_id: clientId,
-          text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
-          parse_mode: 'HTML'
-        });
+        await sendSearchItem(env, items[idx], idx, dest);
       }
-    } catch (finishErr) {
-      console.error('processBatch finishOrder error:', finishErr);
+    } catch (itemErr) {
+      console.error(`processOneBatch item ${idx} error:`, itemErr);
     }
-
-    await releaseOrderLock(env, clientId, workerUrl);
-  } catch (e) {
-    console.error('processBatch fatal error:', e);
   }
+
+  if (end < items.length) {
+    return { orderId, startIdx: end };
+  }
+
+  // All items done — finalize
+  await env.CLIENTS.delete(`pending_items_${orderId}`);
+  try {
+    if (type === 'order') {
+      await finishOrder(env, job);
+    } else {
+      await sendWithRetry(env, 'sendMessage', {
+        chat_id: clientId,
+        text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+        parse_mode: 'HTML'
+      });
+    }
+  } catch (finishErr) {
+    console.error('processOneBatch finishOrder error:', finishErr);
+  }
+  await releaseOrderLock(env, clientId, workerUrl);
+  return null;
 }
 
 async function sendOrderItem(env, item, idx, dest, isWhite) {
