@@ -253,6 +253,26 @@ export default {
       }
     }
 
+    // Диагностика обработки заказа
+    if (request.method === 'GET' && url.pathname === '/debug-order') {
+      const orderId = url.searchParams.get('orderId');
+      if (!orderId || !env.CLIENTS) return jsonResponse({ error: 'orderId required' }, 400);
+      const orderRaw = await env.CLIENTS.get(`order_${orderId}`);
+      const pendingRaw = await env.CLIENTS.get(`pending_items_${orderId}`);
+      const clientId = orderId.split('_')[0];
+      const lockVal = await env.CLIENTS.get(`order_lock_${clientId}`);
+      const queueRaw = await env.CLIENTS.get(`order_queue_${clientId}`);
+      return jsonResponse({
+        orderId,
+        orderExists: !!orderRaw,
+        orderData: orderRaw ? JSON.parse(orderRaw) : null,
+        pendingItemsExist: !!pendingRaw,
+        pendingItemsCount: pendingRaw ? JSON.parse(pendingRaw).items?.length : 0,
+        lock: lockVal,
+        queue: queueRaw ? JSON.parse(queueRaw) : []
+      });
+    }
+
     // Переустановить webhook (включая callback_query)
     if (request.method === 'GET' && url.pathname === '/set-webhook') {
       const webhookUrl = `${url.origin}/webhook/${env.WEBHOOK_SECRET}`;
