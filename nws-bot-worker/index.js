@@ -272,7 +272,7 @@ export default {
       if (url.searchParams.get('retry') === '1') {
         const pendingRaw = await env.CLIENTS.get(`pending_items_${orderId}`);
         if (pendingRaw) {
-          triggerBatch(url.origin, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+          await triggerBatch(url.origin, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
           return jsonResponse({ retryTriggered: true, orderId });
         }
         return jsonResponse({ retryTriggered: false, reason: 'no pending items' });
@@ -496,15 +496,19 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 const BATCH_SIZE = 4;
 
-function triggerBatch(workerUrl, secret, payload) {
+async function triggerBatch(workerUrl, secret, payload) {
   const url = `${workerUrl}/internal/process-batch`;
   console.log('triggerBatch:', url, JSON.stringify(payload));
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Secret': secret },
-    body: JSON.stringify(payload)
-  }).then(r => console.log('triggerBatch response:', r.status))
-    .catch(e => console.error('triggerBatch error:', e));
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Secret': secret },
+      body: JSON.stringify(payload)
+    });
+    console.log('triggerBatch response:', r.status);
+  } catch (e) {
+    console.error('triggerBatch error:', e);
+  }
 }
 
 async function processBatch(env, body, workerUrl) {
@@ -532,7 +536,7 @@ async function processBatch(env, body, workerUrl) {
     }
 
     if (end < items.length) {
-      triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: end });
+      await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: end });
       return;
     }
 
