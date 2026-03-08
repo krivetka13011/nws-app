@@ -123,8 +123,7 @@ export default {
         await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
         await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
 
-        // Telegram API вызовы — в фоне, чтобы не блокировать ответ клиенту
-        ctx.waitUntil(processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo));
+        ctx.waitUntil(processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo, url.origin));
 
         return jsonResponse({ ok: true, orderId, orderNumber });
       } catch (e) {
@@ -266,6 +265,16 @@ export default {
       });
     }
 
+    // Internal batch processor (self-invocation for large orders)
+    if (request.method === 'POST' && url.pathname === '/internal/process-batch') {
+      const secret = request.headers.get('X-Secret');
+      if (secret !== env.WEBHOOK_SECRET) return new Response('Forbidden', { status: 403 });
+      let body;
+      try { body = await request.json(); } catch (_) { return new Response('Bad', { status: 400 }); }
+      ctx.waitUntil(processBatch(env, body, url.origin).catch(e => console.error('Batch error:', e)));
+      return new Response('OK', { status: 200 });
+    }
+
     // Webhook: /webhook/<WEBHOOK_SECRET>
     if (
       request.method === 'POST' &&
@@ -277,7 +286,7 @@ export default {
       } catch (e) {
         return new Response('OK', { status: 200 });
       }
-      ctx.waitUntil(handleUpdate(update, env).catch(e => console.error('Update error:', e)));
+      ctx.waitUntil(handleUpdate(update, env, url.origin).catch(e => console.error('Update error:', e)));
       return new Response('OK', { status: 200 });
     }
 
@@ -287,7 +296,7 @@ export default {
 
 // ===== Background order processing (called via ctx.waitUntil) =====
 
-async function processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo) {
+async function processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo, workerUrl) {
   try {
     const chatId = orderData.clientId;
     const topicId = await getOrCreateTopic(env, chatId, user);
@@ -296,6 +305,14 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
     const dest = topicId
       ? { chat_id: groupId, message_thread_id: topicId }
       : { chat_id: Number(env.MANAGER_ID) };
+
+    const lockAcquired = await acquireOrderLock(env, chatId, orderId);
+    if (!lockAcquired) {
+      await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+        type: 'order', orderId, orderData, items, dest, isWhite, workerUrl
+      }));
+      return;
+    }
 
     const statusText = buildOrderStatus(orderData);
     const keyboard = buildOrderKeyboard(orderId, orderData);
@@ -318,66 +335,15 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
       }
     }
 
-    for (let idx = 0; idx < items.length; idx++) {
-      if (idx > 0) await sleep(1500);
-
-      const item = items[idx];
-      const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
-      const resRub = calcRub(item.price ?? resYuan, isWhite);
-      const link = item.link || 'Не указана';
-      const textMsg =
-        `  📍  <b>ТОВАР №${idx + 1}</b>\n` +
-        `  🔗  ${link}\n` +
-        `  💰  Цена: ${item.price ?? '—'} ¥\n` +
-        `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
-      const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
-
-      if (imgUrls.length) {
-        const batchSize = 9;
-        for (let start = 0; start < imgUrls.length; start += batchSize) {
-          if (start > 0) await sleep(1000);
-          const batch = imgUrls.slice(start, start + batchSize);
-          const media = batch.map((u, i) => {
-            if (start === 0 && i === 0) return { type: 'photo', media: u, caption: textMsg, parse_mode: 'HTML' };
-            return { type: 'photo', media: u };
-          });
-          try {
-            await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
-          } catch (err) {
-            await sendWithRetry(env, 'sendMessage', { ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true });
-            for (const u of batch) {
-              try {
-                await sleep(500);
-                await sendWithRetry(env, 'sendPhoto', { ...dest, photo: u });
-              } catch (_) { await callTelegram(env, 'sendMessage', { ...dest, text: `📸 <a href="${u}">Фото</a>`, parse_mode: 'HTML' }); }
-            }
-          }
-        }
-      } else {
-        await sendWithRetry(env, 'sendMessage', { ...dest, text: `${textMsg}\n  📸  Фото: Нет`, parse_mode: 'HTML', disable_web_page_preview: true });
-      }
-    }
-
-    await sleep(1000);
-    await sendWithRetry(env, 'sendMessage', {
-      chat_id: chatId,
-      text: `  ✅  <b>Ваш заказ №${orderData.orderNumber} успешно принят!</b>\n\nМенеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.`,
-      parse_mode: 'HTML'
-    });
-
-    const clientStatusText = buildClientStatusText(orderData);
-    const clientStatusSent = await sendWithRetry(env, 'sendMessage', {
-      chat_id: chatId,
-      text: clientStatusText,
-      parse_mode: 'HTML'
-    });
-    if (clientStatusSent?.result?.message_id) {
-      orderData.clientStatusMsgId = clientStatusSent.result.message_id;
-    }
-
-    // Обновить KV с pinnedMsgId и clientStatusMsgId
     await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
     await addToBroadcastList(env, chatId);
+
+    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+      type: 'order', items, dest, isWhite, clientId: chatId,
+      orderNumber: orderData.orderNumber, orderId, workerUrl
+    }));
+
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
   } catch (e) {
     console.error('processCreateOrder background error:', e);
   }
@@ -434,6 +400,241 @@ async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) 
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+const BATCH_SIZE = 4;
+
+async function triggerBatch(workerUrl, secret, payload) {
+  try {
+    await fetch(`${workerUrl}/internal/process-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Secret': secret },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.error('triggerBatch fetch error:', e);
+  }
+}
+
+async function processBatch(env, body, workerUrl) {
+  const { orderId, startIdx } = body;
+  const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+  if (!raw) return;
+
+  const job = JSON.parse(raw);
+  const { type, items, dest, clientId } = job;
+  const end = Math.min(startIdx + BATCH_SIZE, items.length);
+
+  for (let idx = startIdx; idx < end; idx++) {
+    if (idx > startIdx) await sleep(300);
+
+    if (type === 'order') {
+      await sendOrderItem(env, items[idx], idx, dest, job.isWhite);
+    } else {
+      await sendSearchItem(env, items[idx], idx, dest);
+    }
+  }
+
+  if (end < items.length) {
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: end });
+    return;
+  }
+
+  // Все товары отправлены — финализация
+  await env.CLIENTS.delete(`pending_items_${orderId}`);
+
+  if (type === 'order') {
+    await finishOrder(env, job);
+  } else {
+    await sendWithRetry(env, 'sendMessage', {
+      chat_id: clientId,
+      text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+      parse_mode: 'HTML'
+    });
+  }
+
+  await releaseOrderLock(env, clientId, workerUrl);
+}
+
+async function sendOrderItem(env, item, idx, dest, isWhite) {
+  const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
+  const resRub = calcRub(item.price ?? resYuan, isWhite);
+  const link = item.link || 'Не указана';
+  const textMsg =
+    `  📍  <b>ТОВАР №${idx + 1}</b>\n` +
+    `  🔗  ${link}\n` +
+    `  💰  Цена: ${item.price ?? '—'} ¥\n` +
+    `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
+
+  await sendItemMedia(env, item, textMsg, dest);
+}
+
+async function sendSearchItem(env, item, idx, dest) {
+  const textMsg =
+    `  📍  <b>ПОЗИЦИЯ №${idx + 1}</b>\n` +
+    `  💬  ${item.comment || 'Без комментария'}`;
+
+  await sendItemMedia(env, item, textMsg, dest);
+}
+
+async function sendItemMedia(env, item, textMsg, dest) {
+  const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
+
+  if (!imgUrls.length) {
+    await sendWithRetry(env, 'sendMessage', {
+      ...dest, text: `${textMsg}\n  📸  Фото: Нет`,
+      parse_mode: 'HTML', disable_web_page_preview: true
+    });
+    return;
+  }
+
+  const batchSize = 9;
+  for (let start = 0; start < imgUrls.length; start += batchSize) {
+    if (start > 0) await sleep(300);
+    const batch = imgUrls.slice(start, start + batchSize);
+    const media = batch.map((url, i) => {
+      if (start === 0 && i === 0) {
+        return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
+      }
+      return { type: 'photo', media: url };
+    });
+
+    try {
+      await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
+    } catch (err) {
+      console.error('sendMediaGroup error:', err);
+      await sendWithRetry(env, 'sendMessage', {
+        ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true
+      });
+      for (const url of batch) {
+        try {
+          await sendWithRetry(env, 'sendPhoto', { ...dest, photo: url });
+        } catch (_) {
+          await callTelegram(env, 'sendMessage', {
+            ...dest, text: `📸 <a href="${url}">Фото</a>`, parse_mode: 'HTML'
+          });
+        }
+      }
+    }
+  }
+}
+
+async function finishOrder(env, job) {
+  const { clientId, orderNumber, orderId } = job;
+
+  await sendWithRetry(env, 'sendMessage', {
+    chat_id: clientId,
+    text: `  ✅  <b>Ваш заказ №${orderNumber} успешно принят!</b>\n\n` +
+      'Менеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.',
+    parse_mode: 'HTML'
+  });
+
+  const raw = await env.CLIENTS.get(`order_${orderId}`);
+  if (!raw) return;
+  const orderData = JSON.parse(raw);
+
+  const clientStatusText = buildClientStatusText(orderData);
+  const clientStatusSent = await sendWithRetry(env, 'sendMessage', {
+    chat_id: clientId,
+    text: clientStatusText,
+    parse_mode: 'HTML'
+  });
+
+  if (clientStatusSent?.result?.message_id) {
+    orderData.clientStatusMsgId = clientStatusSent.result.message_id;
+    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+  }
+}
+
+// ===== Order queue: per-client lock =====
+
+async function acquireOrderLock(env, clientId, orderId) {
+  const lockKey = `order_lock_${clientId}`;
+  const existing = await env.CLIENTS.get(lockKey);
+  if (existing && existing !== orderId) {
+    const queueKey = `order_queue_${clientId}`;
+    const raw = await env.CLIENTS.get(queueKey);
+    const queue = raw ? JSON.parse(raw) : [];
+    queue.push(orderId);
+    await env.CLIENTS.put(queueKey, JSON.stringify(queue));
+    return false;
+  }
+  // TTL 300s safety net — auto-unlock if stuck
+  await env.CLIENTS.put(lockKey, orderId, { expirationTtl: 300 });
+  return true;
+}
+
+async function releaseOrderLock(env, clientId, workerUrl) {
+  const lockKey = `order_lock_${clientId}`;
+  await env.CLIENTS.delete(lockKey);
+
+  const queueKey = `order_queue_${clientId}`;
+  const raw = await env.CLIENTS.get(queueKey);
+  if (!raw) return;
+
+  const queue = JSON.parse(raw);
+  if (!queue.length) return;
+
+  const nextOrderId = queue.shift();
+  if (queue.length) {
+    await env.CLIENTS.put(queueKey, JSON.stringify(queue));
+  } else {
+    await env.CLIENTS.delete(queueKey);
+  }
+
+  // Запускаем следующий заказ из очереди
+  const jobRaw = await env.CLIENTS.get(`pending_job_${nextOrderId}`);
+  if (!jobRaw) return;
+
+  const job = JSON.parse(jobRaw);
+  await env.CLIENTS.delete(`pending_job_${nextOrderId}`);
+
+  await env.CLIENTS.put(`order_lock_${clientId}`, nextOrderId, { expirationTtl: 300 });
+
+  if (job.type === 'order') {
+    const { orderId, orderData, items, dest, isWhite } = job;
+    const statusText = buildOrderStatus(orderData);
+    const keyboard = buildOrderKeyboard(orderId, orderData);
+
+    const sent = await sendWithRetry(env, 'sendMessage', {
+      ...dest,
+      text: orderData.summaryText + statusText,
+      parse_mode: 'HTML',
+      reply_markup: keyboard
+    });
+
+    if (sent?.result?.message_id) {
+      orderData.pinnedMsgId = sent.result.message_id;
+      const groupId = getGroupId(env);
+      if (groupId && dest.message_thread_id) {
+        await callTelegram(env, 'pinChatMessage', {
+          chat_id: groupId,
+          message_id: sent.result.message_id,
+          disable_notification: true
+        });
+      }
+    }
+
+    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+    await env.CLIENTS.put(`order_by_num_${orderData.orderNumber}`, orderId);
+
+    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+      type: 'order', items, dest, isWhite, clientId,
+      orderNumber: orderData.orderNumber, orderId, workerUrl
+    }));
+
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+  } else if (job.type === 'search') {
+    const { orderId, items, dest, header } = job;
+
+    await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+
+    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+      type: 'search', items, dest, clientId, orderId, workerUrl
+    }));
+
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+  }
+}
 
 // ===== CRM: группа с темами =====
 
@@ -825,7 +1026,7 @@ async function handleDeliveryCommand(env, msg, threadId) {
 
 // ===== Update router =====
 
-async function handleUpdate(update, env) {
+async function handleUpdate(update, env, workerUrl) {
   // Обработка нажатий на inline-кнопки
   if (update.callback_query) {
     await handleCallbackQuery(env, update.callback_query);
@@ -899,9 +1100,9 @@ async function handleUpdate(update, env) {
       if (data.type === 'calc') {
         await handleCalc(env, chatId, data);
       } else if (data.type === 'order') {
-        await handleOrder(env, chatId, msg.from, data);
+        await handleOrder(env, chatId, msg.from, data, workerUrl);
       } else if (data.type === 'search') {
-        await handleSearch(env, chatId, msg.from, data);
+        await handleSearch(env, chatId, msg.from, data, workerUrl);
       }
     } catch (e) {
       console.error('Handle web_app_data error:', e);
@@ -1063,7 +1264,7 @@ function calcRub(priceYuan, isWhite) {
   return Math.ceil((p + 30) * mult * 13);
 }
 
-async function handleOrder(env, chatId, user, data) {
+async function handleOrder(env, chatId, user, data, workerUrl) {
   const items = Array.isArray(data.items) ? data.items : [];
   const isWhite = /белая|white/i.test(data.deliveryType || '');
   const topicId = await getOrCreateTopic(env, chatId, user);
@@ -1076,7 +1277,6 @@ async function handleOrder(env, chatId, user, data) {
   }, 0);
 
   const username = user?.username ? `@${user.username}` : `ID: ${user?.id}`;
-
   const orderNumber = await getAndIncrementOrderCounter(env);
   const deliveryInfo = data.deliveryType || '';
   const summaryText =
@@ -1103,6 +1303,17 @@ async function handleOrder(env, chatId, user, data) {
     : { chat_id: Number(env.MANAGER_ID) };
 
   const orderId = `${chatId}_${data.timestamp || Date.now()}`;
+
+  // Ждём очереди — если другой заказ этого клиента ещё отправляется
+  const lockAcquired = await acquireOrderLock(env, chatId, orderId);
+  if (!lockAcquired) {
+    // Сохраняем данные для отложенной обработки
+    await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+      type: 'order', orderId, orderData, items, dest, isWhite, workerUrl
+    }));
+    return;
+  }
+
   const statusText = buildOrderStatus(orderData);
   const keyboard = buildOrderKeyboard(orderId, orderData);
 
@@ -1115,7 +1326,6 @@ async function handleOrder(env, chatId, user, data) {
 
   if (sent?.result?.message_id) {
     orderData.pinnedMsgId = sent.result.message_id;
-
     if (topicId) {
       await callTelegram(env, 'pinChatMessage', {
         chat_id: groupId,
@@ -1130,103 +1340,20 @@ async function handleOrder(env, chatId, user, data) {
     await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
   }
 
-  for (let idx = 0; idx < items.length; idx++) {
-    if (idx > 0) await sleep(1500);
+  await addToBroadcastList(env, chatId);
 
-    const item = items[idx];
-    const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
-    const resRub = calcRub(item.price ?? resYuan, isWhite);
-    const link = item.link || 'Не указана';
+  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+    type: 'order', items, dest, isWhite, clientId: chatId,
+    orderNumber, orderId, workerUrl
+  }));
 
-    const textMsg =
-      `  📍  <b>ТОВАР №${idx + 1}</b>\n` +
-      `  🔗  ${link}\n` +
-      `  💰  Цена: ${item.price ?? '—'} ¥\n` +
-      `  💲  С комиссией: ${resYuan.toFixed(2)} ¥ / ${resRub} ₽`;
-
-    const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
-
-    if (imgUrls.length) {
-      const batchSize = 9;
-      for (let start = 0; start < imgUrls.length; start += batchSize) {
-        if (start > 0) await sleep(1000);
-        const batch = imgUrls.slice(start, start + batchSize);
-        const media = batch.map((url, i) => {
-          if (start === 0 && i === 0) {
-            return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
-          }
-          return { type: 'photo', media: url };
-        });
-
-        try {
-          await sendWithRetry(env, 'sendMediaGroup', {
-            ...dest,
-            media
-          });
-        } catch (err) {
-          console.error('sendMediaGroup error (order):', err);
-          await sendWithRetry(env, 'sendMessage', {
-            ...dest,
-            text: textMsg,
-            parse_mode: 'HTML',
-            disable_web_page_preview: true
-          });
-          for (const url of batch) {
-            try {
-              await sleep(500);
-              await sendWithRetry(env, 'sendPhoto', {
-                ...dest,
-                photo: url
-              });
-            } catch (photoErr) {
-              await callTelegram(env, 'sendMessage', {
-                ...dest,
-                text: `📸 <a href="${url}">Фото</a>`,
-                parse_mode: 'HTML'
-              });
-            }
-          }
-        }
-      }
-    } else {
-      await sendWithRetry(env, 'sendMessage', {
-        ...dest,
-        text: `${textMsg}\n  📸  Фото: Нет`,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true
-      });
-    }
-  }
-
-  await sleep(1000);
-  await sendWithRetry(env, 'sendMessage', {
-    chat_id: chatId,
-    text:
-      `  ✅  <b>Ваш заказ №${orderNumber} успешно принят!</b>\n\n` +
-      'Менеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.',
-    parse_mode: 'HTML'
-  });
-
-  const clientStatusText = buildClientStatusText(orderData);
-  const clientStatusSent = await sendWithRetry(env, 'sendMessage', {
-    chat_id: chatId,
-    text: clientStatusText,
-    parse_mode: 'HTML'
-  });
-
-  if (clientStatusSent?.result?.message_id && env.CLIENTS) {
-    orderData.clientStatusMsgId = clientStatusSent.result.message_id;
-    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
-  }
+  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
 }
 
-async function handleSearch(env, chatId, user, data) {
+async function handleSearch(env, chatId, user, data, workerUrl) {
   const items = Array.isArray(data.items) ? data.items : [];
   if (!items.length) {
-    await callTelegram(env, 'sendMessage', {
-      chat_id: chatId,
-      text: 'Заявка на поиск пуста.'
-    });
+    await callTelegram(env, 'sendMessage', { chat_id: chatId, text: 'Заявка на поиск пуста.' });
     return;
   }
 
@@ -1237,82 +1364,26 @@ async function handleSearch(env, chatId, user, data) {
     : { chat_id: Number(env.MANAGER_ID) };
 
   const username = user?.username ? `@${user.username}` : `ID: ${user?.id}`;
-
   const header =
     '  🔍  <b>НОВАЯ ЗАЯВКА НА ПОИСК</b>\n' +
     `  👤  Клиент: ${username}\n` +
     `  📦  Позиций: ${items.length}`;
 
-  await sendWithRetry(env, 'sendMessage', {
-    ...dest,
-    text: header,
-    parse_mode: 'HTML'
-  });
+  const orderId = `search_${chatId}_${Date.now()}`;
 
-  for (let idx = 0; idx < items.length; idx++) {
-    if (idx > 0) await sleep(1500);
-
-    const item = items[idx];
-    const textMsg =
-      `  📍  <b>ПОЗИЦИЯ №${idx + 1}</b>\n` +
-      `  💬  ${item.comment || 'Без комментария'}`;
-
-    const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
-
-    if (imgUrls.length) {
-      const batchSize = 9;
-      for (let start = 0; start < imgUrls.length; start += batchSize) {
-        if (start > 0) await sleep(1000);
-        const batch = imgUrls.slice(start, start + batchSize);
-        const media = batch.map((url, i) => {
-          if (start === 0 && i === 0) {
-            return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
-          }
-          return { type: 'photo', media: url };
-        });
-
-        try {
-          await sendWithRetry(env, 'sendMediaGroup', {
-            ...dest,
-            media
-          });
-        } catch (err) {
-          console.error('sendMediaGroup error (search):', err);
-          await sendWithRetry(env, 'sendMessage', {
-            ...dest,
-            text: textMsg,
-            parse_mode: 'HTML'
-          });
-          for (const url of batch) {
-            try {
-              await sleep(500);
-              await sendWithRetry(env, 'sendPhoto', {
-                ...dest,
-                photo: url
-              });
-            } catch (photoErr) {
-              await callTelegram(env, 'sendMessage', {
-                ...dest,
-                text: `📸 <a href="${url}">Фото</a>`,
-                parse_mode: 'HTML'
-              });
-            }
-          }
-        }
-      }
-    } else {
-      await sendWithRetry(env, 'sendMessage', {
-        ...dest,
-        text: `${textMsg}\n  📸  Фото: Нет`,
-        parse_mode: 'HTML'
-      });
-    }
+  const lockAcquired = await acquireOrderLock(env, chatId, orderId);
+  if (!lockAcquired) {
+    await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+      type: 'search', orderId, items, dest, clientId: chatId, header, workerUrl
+    }));
+    return;
   }
 
-  await sleep(1000);
-  await sendWithRetry(env, 'sendMessage', {
-    chat_id: chatId,
-    text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
-    parse_mode: 'HTML'
-  });
+  await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+
+  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+    type: 'search', items, dest, clientId: chatId, orderId, workerUrl
+  }));
+
+  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
 }
