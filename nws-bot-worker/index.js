@@ -197,25 +197,23 @@ export default {
         return jsonResponse({ ok: false }, 400);
       }
       try {
-        const list = await env.CLIENTS.list({ prefix: 'order_' });
+        const list = await env.CLIENTS.list({ prefix: `order_${clientId}_` });
         const orders = [];
         for (const key of list.keys) {
           const stored = await env.CLIENTS.get(key.name);
           if (!stored) continue;
           try {
             const od = JSON.parse(stored);
-            if (Number(od.clientId) === Number(clientId)) {
-              const orderId = key.name.replace('order_', '');
-              orders.push({
-                orderId,
-                orderNumber: od.orderNumber || null,
-                totalRub: od.totalRub || 0,
-                orderPaid: od.orderPaid || false,
-                deliveryPaid: od.deliveryPaid || false,
-                deliveryAmount: od.deliveryAmount || null,
-                timestamp: od.createdAt || null
-              });
-            }
+            const orderId = key.name.replace('order_', '');
+            orders.push({
+              orderId,
+              orderNumber: od.orderNumber || null,
+              totalRub: od.totalRub || 0,
+              orderPaid: od.orderPaid || false,
+              deliveryPaid: od.deliveryPaid || false,
+              deliveryAmount: od.deliveryAmount || null,
+              timestamp: od.createdAt || null
+            });
           } catch (_) {}
         }
         return jsonResponse({ ok: true, orders });
@@ -273,12 +271,13 @@ export default {
       request.method === 'POST' &&
       url.pathname === `/webhook/${env.WEBHOOK_SECRET}`
     ) {
+      let update;
       try {
-        const update = await request.json();
-        await handleUpdate(update, env);
+        update = await request.json();
       } catch (e) {
-        console.error('Update error:', e);
+        return new Response('OK', { status: 200 });
       }
+      ctx.waitUntil(handleUpdate(update, env).catch(e => console.error('Update error:', e)));
       return new Response('OK', { status: 200 });
     }
 
