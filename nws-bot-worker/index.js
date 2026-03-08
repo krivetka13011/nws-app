@@ -503,15 +503,32 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
     await addToBroadcastList(env, chatId);
     bc.push('saved');
 
-    const jobData = {
-      type: 'order', items, dest, isWhite, clientId: chatId,
-      orderNumber: orderData.orderNumber, orderId, workerUrl
-    };
-    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jobData));
-    bc.push('pending_saved');
+    bc.push('sending_items');
+    await env.CLIENTS.put(`bc_${orderId}`, JSON.stringify(bc));
 
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData });
-    bc.push('triggered');
+    // Process ALL items directly (no self-invocation — not supported on free plan)
+    for (let idx = 0; idx < items.length; idx++) {
+      if (idx > 0) await sleep(300);
+      try {
+        await sendOrderItem(env, items[idx], idx, dest, isWhite);
+        bc.push(`item_${idx}:ok`);
+      } catch (e) {
+        bc.push(`item_${idx}:err`);
+        console.error(`Item ${idx} error:`, e);
+      }
+    }
+
+    // Finalize
+    try {
+      const job = { clientId: chatId, orderNumber: orderData.orderNumber, orderId, dest };
+      await finishOrder(env, job);
+      bc.push('finished');
+    } catch (e) {
+      bc.push(`finish_err:${String(e)}`);
+    }
+
+    await releaseOrderLock(env, chatId, workerUrl);
+    bc.push('done');
     await env.CLIENTS.put(`bc_${orderId}`, JSON.stringify(bc));
   } catch (e) {
     bc.push(`error:${String(e)}`);
@@ -837,22 +854,31 @@ async function releaseOrderLock(env, clientId, workerUrl) {
     await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
     await env.CLIENTS.put(`order_by_num_${orderData.orderNumber}`, orderId);
 
-    const jd = {
-      type: 'order', items, dest, isWhite, clientId,
-      orderNumber: orderData.orderNumber, orderId, workerUrl
-    };
-    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jd));
+    for (let idx = 0; idx < items.length; idx++) {
+      if (idx > 0) await sleep(300);
+      try { await sendOrderItem(env, items[idx], idx, dest, isWhite); } catch (_) {}
+    }
 
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData: jd });
+    try {
+      await finishOrder(env, { clientId, orderNumber: orderData.orderNumber, orderId, dest });
+    } catch (_) {}
+    await releaseOrderLock(env, clientId, workerUrl);
   } else if (job.type === 'search') {
     const { orderId, items, dest, header } = job;
 
     await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
 
-    const jd = { type: 'search', items, dest, clientId, orderId, workerUrl };
-    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jd));
+    for (let idx = 0; idx < items.length; idx++) {
+      if (idx > 0) await sleep(300);
+      try { await sendSearchItem(env, items[idx], idx, dest); } catch (_) {}
+    }
 
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData: jd });
+    await sendWithRetry(env, 'sendMessage', {
+      chat_id: clientId,
+      text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+      parse_mode: 'HTML'
+    });
+    await releaseOrderLock(env, clientId, workerUrl);
   }
 }
 
@@ -1599,13 +1625,23 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
 
   await addToBroadcastList(env, chatId);
 
-  const jobData = {
-    type: 'order', items, dest, isWhite, clientId: chatId,
-    orderNumber, orderId, workerUrl
-  };
-  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jobData));
+  for (let idx = 0; idx < items.length; idx++) {
+    if (idx > 0) await sleep(300);
+    try {
+      await sendOrderItem(env, items[idx], idx, dest, isWhite);
+    } catch (e) {
+      console.error(`handleOrder item ${idx} error:`, e);
+    }
+  }
 
-  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData });
+  try {
+    const job = { clientId: chatId, orderNumber, orderId, dest };
+    await finishOrder(env, job);
+  } catch (e) {
+    console.error('handleOrder finishOrder error:', e);
+  }
+
+  await releaseOrderLock(env, chatId, workerUrl);
 }
 
 async function handleSearch(env, chatId, user, data, workerUrl) {
@@ -1646,8 +1682,20 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
   }
 
-  const jobData = { type: 'search', items, dest, clientId: chatId, orderId, workerUrl };
-  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jobData));
+  for (let idx = 0; idx < items.length; idx++) {
+    if (idx > 0) await sleep(300);
+    try {
+      await sendSearchItem(env, items[idx], idx, dest);
+    } catch (e) {
+      console.error(`handleSearch item ${idx} error:`, e);
+    }
+  }
 
-  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData });
+  await sendWithRetry(env, 'sendMessage', {
+    chat_id: chatId,
+    text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+    parse_mode: 'HTML'
+  });
+
+  await releaseOrderLock(env, chatId, workerUrl);
 }
