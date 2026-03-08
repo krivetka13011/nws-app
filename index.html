@@ -920,14 +920,72 @@
                     orderStatus: '🔴 Заказ: Не оплачен', deliveryStatus: '🔴 Доставка: Счёт не выставлен'
                 });
 
-                const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)', timestamp: orderTs };
-                let json = JSON.stringify(data);
-                if (json.length > 4000) {
-                    data.items = data.items.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, resRub: i.resRub, imgUrls: (i.imgUrls || []).slice(0, 2) }));
-                    json = JSON.stringify(data);
-                    if (json.length > 4000) { data.items = data.items.map(i => ({ ...i, imgUrls: [] })); json = JSON.stringify(data); }
+                const btn = document.getElementById('btn-action-order');
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...'; }
+
+                // Use API path for full photo support
+                const apiBody = {
+                    userId, username: tg.initDataUnsafe?.user?.username || '',
+                    firstName: tg.initDataUnsafe?.user?.first_name || '',
+                    lastName: tg.initDataUnsafe?.user?.last_name || '',
+                    items: orderItems.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, imgUrls: i.imgUrls || [] })),
+                    deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
+                    timestamp: orderTs
+                };
+
+                let apiOk = false;
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/create-order`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(apiBody)
+                    });
+                    const result = await res.json();
+                    if (result.ok) {
+                        apiOk = true;
+                        const oid = result.orderId;
+
+                        // Poll /api/continue-order until all items processed
+                        if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка товаров...';
+                        let done = false;
+                        while (!done) {
+                            try {
+                                const cr = await fetch(`${WORKER_URL}/api/continue-order`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ orderId: oid })
+                                });
+                                const cResult = await cr.json();
+                                if (cResult.done) {
+                                    done = true;
+                                } else if (cResult.total) {
+                                    const pct = Math.round((cResult.processed / cResult.total) * 100);
+                                    if (btn) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${cResult.processed}/${cResult.total} (${pct}%)`;
+                                }
+                            } catch (pollErr) {
+                                console.error('Poll error:', pollErr);
+                                await new Promise(r => setTimeout(r, 2000));
+                            }
+                        }
+
+                        tg.showAlert('Заказ успешно отправлен!');
+                        setTimeout(() => tg.close(), 1500);
+                    }
+                } catch (apiErr) {
+                    console.error('API error, fallback to sendData:', apiErr);
                 }
-                tg.sendData(json);
+
+                // Fallback to tg.sendData if API failed
+                if (!apiOk) {
+                    const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)', timestamp: orderTs };
+                    let json = JSON.stringify(data);
+                    if (json.length > 4000) {
+                        data.items = data.items.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, resRub: i.resRub, imgUrls: (i.imgUrls || []).slice(0, 2) }));
+                        json = JSON.stringify(data);
+                        if (json.length > 4000) { data.items = data.items.map(i => ({ ...i, imgUrls: [] })); json = JSON.stringify(data); }
+                    }
+                    tg.sendData(json);
+                }
             } catch (e) {
                 const btn = document.getElementById('btn-action-order');
                 if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }

@@ -120,15 +120,115 @@ export default {
           createdAt: ts
         };
 
+        // Topic creation, summary, pin — synchronously
+        const topicId = await getOrCreateTopic(env, chatId, user);
+        const groupId = getGroupId(env);
+        let dest = topicId
+          ? { chat_id: groupId, message_thread_id: topicId }
+          : { chat_id: Number(env.MANAGER_ID) };
+
+        const lockAcquired = await acquireOrderLock(env, chatId, orderId);
+        if (!lockAcquired) {
+          await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+          await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
+          await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+            type: 'order', orderId, orderData, items, dest, isWhite, workerUrl: url.origin
+          }));
+          return jsonResponse({ ok: true, orderId, orderNumber, queued: true });
+        }
+
+        const statusText = buildOrderStatus(orderData);
+        const keyboard = buildOrderKeyboard(orderId, orderData);
+
+        let sent = await sendWithRetry(env, 'sendMessage', {
+          ...dest, text: summaryText + statusText, parse_mode: 'HTML', reply_markup: keyboard
+        });
+        if (isThreadNotFound(sent)) {
+          const newTopicId = await invalidateAndRecreateTopic(env, chatId, user);
+          dest = newTopicId
+            ? { chat_id: groupId, message_thread_id: newTopicId }
+            : { chat_id: Number(env.MANAGER_ID) };
+          sent = await sendWithRetry(env, 'sendMessage', {
+            ...dest, text: summaryText + statusText, parse_mode: 'HTML', reply_markup: keyboard
+          });
+        }
+
+        if (sent?.result?.message_id) {
+          orderData.pinnedMsgId = sent.result.message_id;
+          if (dest.message_thread_id) {
+            await callTelegram(env, 'pinChatMessage', {
+              chat_id: groupId, message_id: sent.result.message_id, disable_notification: true
+            });
+          }
+        }
+
         await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
         await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
+        await addToBroadcastList(env, chatId);
 
-        ctx.waitUntil(processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo, url.origin));
+        // Save items for continuation processing
+        await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+          type: 'order', items, dest, isWhite, clientId: chatId,
+          orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
+        }));
 
-        return jsonResponse({ ok: true, orderId, orderNumber });
+        return jsonResponse({ ok: true, orderId, orderNumber, totalItems: items.length, processed: 0 });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
       }
+    }
+
+    // POST /api/continue-order — process next batch of items
+    if (request.method === 'POST' && url.pathname === '/api/continue-order') {
+      let body;
+      try { body = await request.json(); } catch (_) { return jsonResponse({ error: 'bad json' }, 400); }
+      const { orderId } = body;
+      if (!orderId) return jsonResponse({ error: 'orderId required' }, 400);
+
+      const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+      if (!raw) return jsonResponse({ ok: true, done: true, processed: 0 });
+
+      const job = JSON.parse(raw);
+      const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
+      const ITEMS_PER_CALL = 6;
+      const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
+
+      for (let idx = nextIdx; idx < end; idx++) {
+        if (idx > nextIdx) await sleep(300);
+        try {
+          if (job.type === 'order') {
+            await sendOrderItem(env, items[idx], idx, dest, isWhite);
+          } else {
+            await sendSearchItem(env, items[idx], idx, dest);
+          }
+        } catch (e) {
+          console.error(`continue-order item ${idx}:`, e);
+        }
+      }
+
+      if (end < items.length) {
+        job.nextIdx = end;
+        await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
+        return jsonResponse({ ok: true, done: false, processed: end, total: items.length });
+      }
+
+      // All items done
+      await env.CLIENTS.delete(`pending_items_${orderId}`);
+      try {
+        if (job.type === 'order') {
+          await finishOrder(env, job);
+        } else {
+          await sendWithRetry(env, 'sendMessage', {
+            chat_id: clientId,
+            text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+            parse_mode: 'HTML'
+          });
+        }
+      } catch (e) {
+        console.error('continue-order finish error:', e);
+      }
+      await releaseOrderLock(env, clientId, job.workerUrl);
+      return jsonResponse({ ok: true, done: true, processed: items.length, total: items.length });
     }
 
     // PUT /api/history — заменить всю историю (для очистки и обновления orderNumber)
