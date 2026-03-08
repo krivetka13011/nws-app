@@ -486,13 +486,14 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
     await addToBroadcastList(env, chatId);
     bc.push('saved');
 
-    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+    const jobData = {
       type: 'order', items, dest, isWhite, clientId: chatId,
       orderNumber: orderData.orderNumber, orderId, workerUrl
-    }));
+    };
+    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jobData));
     bc.push('pending_saved');
 
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData });
     bc.push('triggered');
     await env.CLIENTS.put(`bc_${orderId}`, JSON.stringify(bc));
   } catch (e) {
@@ -577,21 +578,25 @@ async function triggerBatch(workerUrl, secret, payload) {
 
 async function processBatch(env, body, workerUrl) {
   try {
-    const { orderId, startIdx } = body;
-    let raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-    // KV eventual consistency: data may not be available on another edge node yet
-    if (!raw) {
-      console.log('processBatch: pending_items not found, waiting for KV propagation...');
-      await sleep(3000);
-      raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    const { orderId, startIdx, jobData } = body;
+    let job;
+    if (jobData) {
+      job = jobData;
+      console.log('processBatch: using inline jobData');
+    } else {
+      let raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+      if (!raw) {
+        console.log('processBatch: waiting for KV propagation...');
+        await sleep(3000);
+        raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+      }
+      if (!raw) {
+        await sleep(5000);
+        raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+      }
+      if (!raw) { console.log('processBatch: no pending items for', orderId); return; }
+      job = JSON.parse(raw);
     }
-    if (!raw) {
-      await sleep(5000);
-      raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-    }
-    if (!raw) { console.log('processBatch: no pending items after retries for', orderId); return; }
-
-    const job = JSON.parse(raw);
     let { type, items, dest, clientId } = job;
     const end = Math.min(startIdx + BATCH_SIZE, items.length);
     console.log(`processBatch: ${orderId} items[${startIdx}..${end - 1}] of ${items.length}`);
@@ -829,22 +834,22 @@ async function releaseOrderLock(env, clientId, workerUrl) {
     await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
     await env.CLIENTS.put(`order_by_num_${orderData.orderNumber}`, orderId);
 
-    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+    const jd = {
       type: 'order', items, dest, isWhite, clientId,
       orderNumber: orderData.orderNumber, orderId, workerUrl
-    }));
+    };
+    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jd));
 
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData: jd });
   } else if (job.type === 'search') {
     const { orderId, items, dest, header } = job;
 
     await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
 
-    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
-      type: 'search', items, dest, clientId, orderId, workerUrl
-    }));
+    const jd = { type: 'search', items, dest, clientId, orderId, workerUrl };
+    await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jd));
 
-    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+    await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData: jd });
   }
 }
 
@@ -1591,12 +1596,13 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
 
   await addToBroadcastList(env, chatId);
 
-  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+  const jobData = {
     type: 'order', items, dest, isWhite, clientId: chatId,
     orderNumber, orderId, workerUrl
-  }));
+  };
+  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jobData));
 
-  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData });
 }
 
 async function handleSearch(env, chatId, user, data, workerUrl) {
@@ -1637,9 +1643,8 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
   }
 
-  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
-    type: 'search', items, dest, clientId: chatId, orderId, workerUrl
-  }));
+  const jobData = { type: 'search', items, dest, clientId: chatId, orderId, workerUrl };
+  await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(jobData));
 
-  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+  await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0, jobData });
 }
