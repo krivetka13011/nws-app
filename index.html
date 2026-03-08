@@ -908,52 +908,9 @@
 
                 const orderTs = Date.now();
                 const userId = getHistoryUserId() || 0;
-                const user = tg.initDataUnsafe?.user || {};
-                const btn = document.getElementById('btn-action-order');
-                const originalText = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...';
 
                 const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
                 const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
-
-                if (userId) {
-                    try {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 8000);
-                        const res = await fetch(`${WORKER_URL}/api/create-order`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            signal: controller.signal,
-                            body: JSON.stringify({
-                                userId, username: user.username || '', firstName: user.first_name || '',
-                                lastName: user.last_name || '', items: orderItems,
-                                deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
-                                timestamp: orderTs
-                            })
-                        });
-                        clearTimeout(timeoutId);
-                        const data = await res.json();
-                        if (data.ok) {
-                            await addToHistoryV2({
-                                title: 'Заказ на выкуп', date: new Date().toLocaleString('ru-RU'),
-                                delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
-                                price: priceHtml, totalRub, itemsData: orderItems, images: historyImages,
-                                orderId: data.orderId, orderNumber: data.orderNumber, timestamp: orderTs,
-                                orderStatus: '🔴 Заказ: Не оплачен', deliveryStatus: '🔴 Доставка: Счёт не выставлен'
-                            });
-                            btn.innerHTML = '<i class="fas fa-check"></i> Заказ отправлен!';
-                            setTimeout(() => {
-                                try { tg.close(); } catch (_) {
-                                    btn.disabled = false; btn.innerHTML = originalText;
-                                    alert('✅ Заказ №' + data.orderNumber + ' успешно оформлен!');
-                                }
-                            }, 1200);
-                            return;
-                        }
-                    } catch (_) {}
-                }
-
                 const orderId = `${userId}_${orderTs}`;
                 await addToHistoryV2({
                     title: 'Заказ на выкуп', date: new Date().toLocaleString('ru-RU'),
@@ -962,6 +919,7 @@
                     orderId, timestamp: orderTs,
                     orderStatus: '🔴 Заказ: Не оплачен', deliveryStatus: '🔴 Доставка: Счёт не выставлен'
                 });
+
                 const data = { type: 'order', items: orderItems, deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)', timestamp: orderTs };
                 let json = JSON.stringify(data);
                 if (json.length > 4000) {
