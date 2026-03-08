@@ -294,6 +294,36 @@ export default {
       });
     }
 
+    // Диагностика: тест отправки сообщения
+    if (request.method === 'GET' && url.pathname === '/debug-send') {
+      const groupId = getGroupId(env);
+      const chatId = url.searchParams.get('chatId') || env.MANAGER_ID;
+
+      const results = {};
+      try {
+        results.hasBotToken = !!env.BOT_TOKEN;
+        results.botTokenLen = env.BOT_TOKEN ? env.BOT_TOKEN.length : 0;
+      } catch (_) {}
+
+      try {
+        const topicRaw = await env.CLIENTS.get(`topic_${chatId}`);
+        results.topicId = topicRaw;
+      } catch (_) {}
+
+      try {
+        const dest = results.topicId
+          ? { chat_id: Number(groupId), message_thread_id: Number(results.topicId) }
+          : { chat_id: Number(chatId) };
+        results.dest = dest;
+        const r = await callTelegram(env, 'sendMessage', { ...dest, text: 'Debug test message', parse_mode: 'HTML' });
+        results.sendResult = r;
+      } catch (e) {
+        results.sendError = String(e);
+      }
+
+      return jsonResponse(results);
+    }
+
     // Переустановить webhook (включая callback_query)
     if (request.method === 'GET' && url.pathname === '/set-webhook') {
       const webhookUrl = `${url.origin}/webhook/${env.WEBHOOK_SECRET}`;
