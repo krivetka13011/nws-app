@@ -447,17 +447,33 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
     const statusText = buildOrderStatus(orderData);
     const keyboard = buildOrderKeyboard(orderId, orderData);
 
-    const sent = await sendWithRetry(env, 'sendMessage', {
+    let sent = await sendWithRetry(env, 'sendMessage', {
       ...dest,
       text: orderData.summaryText + statusText,
       parse_mode: 'HTML',
       reply_markup: keyboard
     });
+
+    // Stale topic recovery
+    if (isThreadNotFound(sent)) {
+      bc.push('topic_stale_recovering');
+      const newTopicId = await invalidateAndRecreateTopic(env, chatId, user);
+      dest = newTopicId
+        ? { chat_id: groupId, message_thread_id: newTopicId }
+        : { chat_id: Number(env.MANAGER_ID) };
+      bc.push(`new_dest:${JSON.stringify(dest)}`);
+      sent = await sendWithRetry(env, 'sendMessage', {
+        ...dest,
+        text: orderData.summaryText + statusText,
+        parse_mode: 'HTML',
+        reply_markup: keyboard
+      });
+    }
     bc.push(`sent:${JSON.stringify({ok:sent?.ok, err:sent?.error_code, desc:sent?.description?.slice(0,50)})}`);
 
     if (sent?.result?.message_id) {
       orderData.pinnedMsgId = sent.result.message_id;
-      if (topicId) {
+      if (dest.message_thread_id) {
         await callTelegram(env, 'pinChatMessage', {
           chat_id: groupId,
           message_id: sent.result.message_id,
@@ -566,9 +582,32 @@ async function processBatch(env, body, workerUrl) {
     if (!raw) { console.log('processBatch: no pending items for', orderId); return; }
 
     const job = JSON.parse(raw);
-    const { type, items, dest, clientId } = job;
+    let { type, items, dest, clientId } = job;
     const end = Math.min(startIdx + BATCH_SIZE, items.length);
     console.log(`processBatch: ${orderId} items[${startIdx}..${end - 1}] of ${items.length}`);
+
+    // Probe first: send a test message to check if dest is valid
+    if (startIdx === 0 && dest.message_thread_id) {
+      const probe = await callTelegram(env, 'sendMessage', {
+        ...dest, text: '📦 Загрузка товаров...', parse_mode: 'HTML'
+      });
+      if (isThreadNotFound(probe)) {
+        console.log('processBatch: stale topic detected, recreating');
+        const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
+        const groupId = getGroupId(env);
+        dest = newTopicId
+          ? { chat_id: groupId, message_thread_id: newTopicId }
+          : { chat_id: Number(env.MANAGER_ID) };
+        // Update stored dest for subsequent batches
+        job.dest = dest;
+        await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
+      } else if (probe?.result?.message_id) {
+        // Delete probe message
+        await callTelegram(env, 'deleteMessage', {
+          chat_id: dest.chat_id, message_id: probe.result.message_id
+        });
+      }
+    }
 
     for (let idx = startIdx; idx < end; idx++) {
       if (idx > startIdx) await sleep(300);
@@ -834,15 +873,7 @@ async function getOrCreateTopic(env, clientChatId, from) {
   if (stored) {
     try {
       const { topicId } = JSON.parse(stored);
-      // Verify topic still exists
-      const check = await callTelegram(env, 'sendChatAction', {
-        chat_id: groupId, message_thread_id: topicId, action: 'typing'
-      });
-      if (check.ok) return topicId;
-      // Stale topic — clean up and recreate
-      console.log(`Topic ${topicId} stale for client ${clientChatId}, recreating`);
-      await env.CLIENTS.delete(key);
-      await env.CLIENTS.delete(`topic_${topicId}`);
+      return topicId;
     } catch (_) {}
   }
 
@@ -857,6 +888,32 @@ async function getOrCreateTopic(env, clientChatId, from) {
   await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
   await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
   return topicId;
+}
+
+async function invalidateAndRecreateTopic(env, clientChatId, from) {
+  const groupId = getGroupId(env);
+  if (!groupId || !env.CLIENTS) return null;
+  const key = `client_${clientChatId}`;
+  const stored = await env.CLIENTS.get(key);
+  if (stored) {
+    try {
+      const { topicId: old } = JSON.parse(stored);
+      await env.CLIENTS.delete(`topic_${old}`);
+    } catch (_) {}
+    await env.CLIENTS.delete(key);
+  }
+  const name = clientName(from);
+  const res = await callTelegram(env, 'createForumTopic', { chat_id: groupId, name });
+  if (!res.ok || !res.result) return null;
+  const topicId = res.result.message_thread_id;
+  await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
+  await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
+  return topicId;
+}
+
+function isThreadNotFound(result) {
+  return result && !result.ok && result.error_code === 400 &&
+    result.description && result.description.includes('thread not found');
 }
 
 async function getClientForTopic(env, topicId) {
@@ -1469,16 +1526,14 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
     createdAt: Date.now()
   };
 
-  const dest = topicId
+  let dest = topicId
     ? { chat_id: groupId, message_thread_id: topicId }
     : { chat_id: Number(env.MANAGER_ID) };
 
   const orderId = `${chatId}_${data.timestamp || Date.now()}`;
 
-  // Ждём очереди — если другой заказ этого клиента ещё отправляется
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
   if (!lockAcquired) {
-    // Сохраняем данные для отложенной обработки
     await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
       type: 'order', orderId, orderData, items, dest, isWhite, workerUrl
     }));
@@ -1488,16 +1543,29 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
   const statusText = buildOrderStatus(orderData);
   const keyboard = buildOrderKeyboard(orderId, orderData);
 
-  const sent = await sendWithRetry(env, 'sendMessage', {
+  let sent = await sendWithRetry(env, 'sendMessage', {
     ...dest,
     text: summaryText + statusText,
     parse_mode: 'HTML',
     reply_markup: keyboard
   });
 
+  if (isThreadNotFound(sent)) {
+    const newTopicId = await invalidateAndRecreateTopic(env, chatId, user);
+    dest = newTopicId
+      ? { chat_id: groupId, message_thread_id: newTopicId }
+      : { chat_id: Number(env.MANAGER_ID) };
+    sent = await sendWithRetry(env, 'sendMessage', {
+      ...dest,
+      text: summaryText + statusText,
+      parse_mode: 'HTML',
+      reply_markup: keyboard
+    });
+  }
+
   if (sent?.result?.message_id) {
     orderData.pinnedMsgId = sent.result.message_id;
-    if (topicId) {
+    if (dest.message_thread_id) {
       await callTelegram(env, 'pinChatMessage', {
         chat_id: groupId,
         message_id: sent.result.message_id,
@@ -1530,7 +1598,7 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
 
   const topicId = await getOrCreateTopic(env, chatId, user);
   const groupId = getGroupId(env);
-  const dest = topicId
+  let dest = topicId
     ? { chat_id: groupId, message_thread_id: topicId }
     : { chat_id: Number(env.MANAGER_ID) };
 
@@ -1550,7 +1618,14 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     return;
   }
 
-  await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+  let headerSent = await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+  if (isThreadNotFound(headerSent)) {
+    const newTopicId = await invalidateAndRecreateTopic(env, chatId, user);
+    dest = newTopicId
+      ? { chat_id: groupId, message_thread_id: newTopicId }
+      : { chat_id: Number(env.MANAGER_ID) };
+    await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+  }
 
   await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
     type: 'search', items, dest, clientId: chatId, orderId, workerUrl
