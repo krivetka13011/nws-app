@@ -319,6 +319,8 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
     }
 
     for (let idx = 0; idx < items.length; idx++) {
+      if (idx > 0) await sleep(1500);
+
       const item = items[idx];
       const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
       const resRub = calcRub(item.price ?? resYuan, isWhite);
@@ -333,6 +335,7 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
       if (imgUrls.length) {
         const batchSize = 9;
         for (let start = 0; start < imgUrls.length; start += batchSize) {
+          if (start > 0) await sleep(1000);
           const batch = imgUrls.slice(start, start + batchSize);
           const media = batch.map((u, i) => {
             if (start === 0 && i === 0) return { type: 'photo', media: u, caption: textMsg, parse_mode: 'HTML' };
@@ -343,8 +346,10 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
           } catch (err) {
             await sendWithRetry(env, 'sendMessage', { ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true });
             for (const u of batch) {
-              try { await sendWithRetry(env, 'sendPhoto', { ...dest, photo: u }); }
-              catch (_) { await callTelegram(env, 'sendMessage', { ...dest, text: `📸 <a href="${u}">Фото</a>`, parse_mode: 'HTML' }); }
+              try {
+                await sleep(500);
+                await sendWithRetry(env, 'sendPhoto', { ...dest, photo: u });
+              } catch (_) { await callTelegram(env, 'sendMessage', { ...dest, text: `📸 <a href="${u}">Фото</a>`, parse_mode: 'HTML' }); }
             }
           }
         }
@@ -353,14 +358,15 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
       }
     }
 
-    await callTelegram(env, 'sendMessage', {
+    await sleep(1000);
+    await sendWithRetry(env, 'sendMessage', {
       chat_id: chatId,
       text: `  ✅  <b>Ваш заказ №${orderData.orderNumber} успешно принят!</b>\n\nМенеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.`,
       parse_mode: 'HTML'
     });
 
     const clientStatusText = buildClientStatusText(orderData);
-    const clientStatusSent = await callTelegram(env, 'sendMessage', {
+    const clientStatusSent = await sendWithRetry(env, 'sendMessage', {
       chat_id: chatId,
       text: clientStatusText,
       parse_mode: 'HTML'
@@ -401,17 +407,33 @@ async function callTelegram(env, method, payload) {
   return data;
 }
 
-async function sendWithRetry(env, method, payload, retries = 3, delayMs = 1000) {
+async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      return await callTelegram(env, method, payload);
+      const data = await callTelegram(env, method, payload);
+      if (data.ok) return data;
+
+      const retryAfter = data.parameters?.retry_after;
+      if (retryAfter && attempt < retries - 1) {
+        await sleep((retryAfter + 1) * 1000);
+        continue;
+      }
+      if (data.error_code === 429 && attempt < retries - 1) {
+        await sleep(3000 * (attempt + 1));
+        continue;
+      }
+
+      if (attempt === retries - 1) return data;
+      await sleep(delayMs * (attempt + 1));
     } catch (e) {
-      console.error(`Retry ${attempt + 1}/${retries} failed:`, e);
+      console.error(`sendWithRetry ${method} attempt ${attempt + 1}/${retries}:`, e);
       if (attempt === retries - 1) throw e;
-      await new Promise((r) => setTimeout(r, delayMs));
+      await sleep(delayMs * (attempt + 1));
     }
   }
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ===== CRM: группа с темами =====
 
@@ -1109,6 +1131,8 @@ async function handleOrder(env, chatId, user, data) {
   }
 
   for (let idx = 0; idx < items.length; idx++) {
+    if (idx > 0) await sleep(1500);
+
     const item = items[idx];
     const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
     const resRub = calcRub(item.price ?? resYuan, isWhite);
@@ -1123,9 +1147,9 @@ async function handleOrder(env, chatId, user, data) {
     const imgUrls = Array.isArray(item.imgUrls) ? item.imgUrls : [];
 
     if (imgUrls.length) {
-      // Фото + текст одним сообщением (caption на первом фото)
       const batchSize = 9;
       for (let start = 0; start < imgUrls.length; start += batchSize) {
+        if (start > 0) await sleep(1000);
         const batch = imgUrls.slice(start, start + batchSize);
         const media = batch.map((url, i) => {
           if (start === 0 && i === 0) {
@@ -1149,6 +1173,7 @@ async function handleOrder(env, chatId, user, data) {
           });
           for (const url of batch) {
             try {
+              await sleep(500);
               await sendWithRetry(env, 'sendPhoto', {
                 ...dest,
                 photo: url
@@ -1173,7 +1198,8 @@ async function handleOrder(env, chatId, user, data) {
     }
   }
 
-  await callTelegram(env, 'sendMessage', {
+  await sleep(1000);
+  await sendWithRetry(env, 'sendMessage', {
     chat_id: chatId,
     text:
       `  ✅  <b>Ваш заказ №${orderNumber} успешно принят!</b>\n\n` +
@@ -1181,9 +1207,8 @@ async function handleOrder(env, chatId, user, data) {
     parse_mode: 'HTML'
   });
 
-  // Отправить клиенту статусное сообщение (будет обновляться при смене статуса)
   const clientStatusText = buildClientStatusText(orderData);
-  const clientStatusSent = await callTelegram(env, 'sendMessage', {
+  const clientStatusSent = await sendWithRetry(env, 'sendMessage', {
     chat_id: chatId,
     text: clientStatusText,
     parse_mode: 'HTML'
@@ -1225,6 +1250,8 @@ async function handleSearch(env, chatId, user, data) {
   });
 
   for (let idx = 0; idx < items.length; idx++) {
+    if (idx > 0) await sleep(1500);
+
     const item = items[idx];
     const textMsg =
       `  📍  <b>ПОЗИЦИЯ №${idx + 1}</b>\n` +
@@ -1235,6 +1262,7 @@ async function handleSearch(env, chatId, user, data) {
     if (imgUrls.length) {
       const batchSize = 9;
       for (let start = 0; start < imgUrls.length; start += batchSize) {
+        if (start > 0) await sleep(1000);
         const batch = imgUrls.slice(start, start + batchSize);
         const media = batch.map((url, i) => {
           if (start === 0 && i === 0) {
@@ -1257,6 +1285,7 @@ async function handleSearch(env, chatId, user, data) {
           });
           for (const url of batch) {
             try {
+              await sleep(500);
               await sendWithRetry(env, 'sendPhoto', {
                 ...dest,
                 photo: url
@@ -1280,7 +1309,8 @@ async function handleSearch(env, chatId, user, data) {
     }
   }
 
-  await callTelegram(env, 'sendMessage', {
+  await sleep(1000);
+  await sendWithRetry(env, 'sendMessage', {
     chat_id: chatId,
     text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
     parse_mode: 'HTML'
