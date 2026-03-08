@@ -468,6 +468,10 @@ async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) 
       const data = await callTelegram(env, method, payload);
       if (data.ok) return data;
 
+      // Non-retryable errors — return immediately
+      if (data.error_code === 400) return data;
+      if (data.error_code === 403) return data;
+
       const retryAfter = data.parameters?.retry_after;
       if (retryAfter && attempt < retries - 1) {
         await sleep((retryAfter + 1) * 1000);
@@ -778,7 +782,15 @@ async function getOrCreateTopic(env, clientChatId, from) {
   if (stored) {
     try {
       const { topicId } = JSON.parse(stored);
-      return topicId;
+      // Verify topic still exists
+      const check = await callTelegram(env, 'sendChatAction', {
+        chat_id: groupId, message_thread_id: topicId, action: 'typing'
+      });
+      if (check.ok) return topicId;
+      // Stale topic — clean up and recreate
+      console.log(`Topic ${topicId} stale for client ${clientChatId}, recreating`);
+      await env.CLIENTS.delete(key);
+      await env.CLIENTS.delete(`topic_${topicId}`);
     } catch (_) {}
   }
 
