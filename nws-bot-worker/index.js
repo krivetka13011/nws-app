@@ -578,8 +578,18 @@ async function triggerBatch(workerUrl, secret, payload) {
 async function processBatch(env, body, workerUrl) {
   try {
     const { orderId, startIdx } = body;
-    const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-    if (!raw) { console.log('processBatch: no pending items for', orderId); return; }
+    let raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    // KV eventual consistency: data may not be available on another edge node yet
+    if (!raw) {
+      console.log('processBatch: pending_items not found, waiting for KV propagation...');
+      await sleep(3000);
+      raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    }
+    if (!raw) {
+      await sleep(5000);
+      raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    }
+    if (!raw) { console.log('processBatch: no pending items after retries for', orderId); return; }
 
     const job = JSON.parse(raw);
     let { type, items, dest, clientId } = job;
