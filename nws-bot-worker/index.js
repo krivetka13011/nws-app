@@ -364,6 +364,38 @@ export default {
       return new Response('OK', { status: 200 });
     }
 
+    // Synchronous batch debug — returns errors instead of swallowing them
+    if (request.method === 'GET' && url.pathname === '/debug-batch') {
+      const orderId = url.searchParams.get('orderId');
+      const startIdx = Number(url.searchParams.get('startIdx') || '0');
+      if (!orderId) return jsonResponse({ error: 'orderId required' }, 400);
+      try {
+        const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+        if (!raw) return jsonResponse({ error: 'no pending items' });
+        const job = JSON.parse(raw);
+        const { type, items, dest } = job;
+        const end = Math.min(startIdx + BATCH_SIZE, items.length);
+        const results = { orderId, startIdx, end, totalItems: items.length, type, dest, itemResults: [] };
+
+        for (let idx = startIdx; idx < end; idx++) {
+          try {
+            if (type === 'order') {
+              await sendOrderItem(env, items[idx], idx, dest, job.isWhite);
+              results.itemResults.push({ idx, ok: true });
+            } else {
+              await sendSearchItem(env, items[idx], idx, dest);
+              results.itemResults.push({ idx, ok: true });
+            }
+          } catch (e) {
+            results.itemResults.push({ idx, ok: false, error: String(e) });
+          }
+        }
+        return jsonResponse(results);
+      } catch (e) {
+        return jsonResponse({ error: String(e) }, 500);
+      }
+    }
+
     // Webhook: /webhook/<WEBHOOK_SECRET>
     if (
       request.method === 'POST' &&
