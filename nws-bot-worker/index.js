@@ -283,6 +283,7 @@ export default {
       const clientId = orderId.split('_')[0];
       const lockVal = await env.CLIENTS.get(`order_lock_${clientId}`);
       const queueRaw = await env.CLIENTS.get(`order_queue_${clientId}`);
+      const bcRaw = await env.CLIENTS.get(`bc_${orderId}`);
       return jsonResponse({
         orderId,
         orderExists: !!orderRaw,
@@ -290,7 +291,8 @@ export default {
         pendingItemsExist: !!pendingRaw,
         pendingItemsCount: pendingRaw ? JSON.parse(pendingRaw).items?.length : 0,
         lock: lockVal,
-        queue: queueRaw ? JSON.parse(queueRaw) : []
+        queue: queueRaw ? JSON.parse(queueRaw) : [],
+        breadcrumbs: bcRaw ? JSON.parse(bcRaw) : null
       });
     }
 
@@ -418,20 +420,27 @@ export default {
 // ===== Background order processing (called via ctx.waitUntil) =====
 
 async function processCreateOrder(env, orderData, orderId, items, user, isWhite, deliveryInfo, workerUrl) {
+  const bc = [];
   try {
+    bc.push('start');
     const chatId = orderData.clientId;
     const topicId = await getOrCreateTopic(env, chatId, user);
+    bc.push(`topic:${topicId}`);
     const groupId = getGroupId(env);
 
     const dest = topicId
       ? { chat_id: groupId, message_thread_id: topicId }
       : { chat_id: Number(env.MANAGER_ID) };
+    bc.push(`dest:${JSON.stringify(dest)}`);
 
     const lockAcquired = await acquireOrderLock(env, chatId, orderId);
+    bc.push(`lock:${lockAcquired}`);
     if (!lockAcquired) {
       await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
         type: 'order', orderId, orderData, items, dest, isWhite, workerUrl
       }));
+      bc.push('queued');
+      await env.CLIENTS.put(`bc_${orderId}`, JSON.stringify(bc));
       return;
     }
 
@@ -444,6 +453,7 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
       parse_mode: 'HTML',
       reply_markup: keyboard
     });
+    bc.push(`sent:${JSON.stringify({ok:sent?.ok, err:sent?.error_code, desc:sent?.description?.slice(0,50)})}`);
 
     if (sent?.result?.message_id) {
       orderData.pinnedMsgId = sent.result.message_id;
@@ -458,14 +468,20 @@ async function processCreateOrder(env, orderData, orderId, items, user, isWhite,
 
     await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
     await addToBroadcastList(env, chatId);
+    bc.push('saved');
 
     await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
       type: 'order', items, dest, isWhite, clientId: chatId,
       orderNumber: orderData.orderNumber, orderId, workerUrl
     }));
+    bc.push('pending_saved');
 
     await triggerBatch(workerUrl, env.WEBHOOK_SECRET, { orderId, startIdx: 0 });
+    bc.push('triggered');
+    await env.CLIENTS.put(`bc_${orderId}`, JSON.stringify(bc));
   } catch (e) {
+    bc.push(`error:${String(e)}`);
+    await env.CLIENTS.put(`bc_${orderId}`, JSON.stringify(bc)).catch(() => {});
     console.error('processCreateOrder background error:', e);
   }
 }
