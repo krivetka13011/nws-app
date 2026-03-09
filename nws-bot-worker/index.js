@@ -277,6 +277,19 @@ export default {
       }
     }
 
+    // Диагностика создания темы: GET /debug-topic?secret=...
+    if (request.method === 'GET' && url.pathname === '/debug-topic') {
+      const secret = url.searchParams.get('secret');
+      if (secret !== env.WEBHOOK_SECRET) return jsonResponse({ ok: false }, 403);
+      const res = await callTelegram(env, 'createForumTopic', {
+        chat_id: Number(env.GROUP_ID),
+        name: 'Тест — удалите'
+      });
+      return new Response(JSON.stringify(res, null, 2), {
+        status: 200, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // Диагностика CRM
     if (request.method === 'GET' && url.pathname === '/debug-crm') {
       const groupId = env.GROUP_ID;
@@ -859,12 +872,16 @@ async function getOrCreateTopic(env, clientChatId, from) {
   }
 
   const name = clientName(from || {});
-  let res = await callTelegram(env, 'createForumTopic', {
-    chat_id: groupId,
+  const res = await callTelegram(env, 'createForumTopic', {
+    chat_id: Number(groupId),
     name
   });
   if (!res.ok || !res.result) {
     console.error('createForumTopic failed:', res.error_code, res.description);
+    await callTelegram(env, 'sendMessage', {
+      chat_id: Number(env.MANAGER_ID),
+      text: `⚠️ Не удалось создать тему для клиента ${clientChatId}:\n${res.error_code || ''} ${res.description || ''}\n\nПроверьте: бот — админ с правом «Управление темами», группа — режим форума включён.`
+    });
     return null;
   }
 
