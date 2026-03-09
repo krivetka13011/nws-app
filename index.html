@@ -599,6 +599,16 @@
             } catch (e) { console.error('History save error:', e); }
         }
 
+        async function updateHistoryOrderNumber(orderId, orderNumber) {
+            if (!orderId || !orderNumber) return;
+            const history = await loadFullHistory();
+            const item = history.find(h => h.title === 'Заказ на выкуп' && h.orderId === orderId);
+            if (item && !item.orderNumber) {
+                item.orderNumber = orderNumber;
+                await saveHistoryToBackend(history, getHistoryUserId());
+            }
+        }
+
         async function loadFullHistory() {
             const userId = getHistoryUserId();
             if (userId) {
@@ -658,9 +668,13 @@
             let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
             let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
             if (item.title === 'Заказ на выкуп') {
-                const orders = await fetchOrdersForClient();
+                let orders = await fetchOrdersForClient();
                 lastOrdersCache = orders;
-                const status = findOrderStatus(orders, item);
+                let status = findOrderStatus(orders, item);
+                if (!status && (item.orderNumber || item.orderId)) {
+                    status = await fetchOrderStatus(item.orderId, item.orderNumber);
+                    if (status) status = { orderId: item.orderId, orderNumber: item.orderNumber, ...status };
+                }
                 if (status) {
                     if (!item.orderNumber) item.orderNumber = status.orderNumber;
                     if (status.orderId) item.orderId = status.orderId;
@@ -943,6 +957,9 @@
                     const result = await res.json();
                     if (result.ok) {
                         apiOk = true;
+                        if (result.orderNumber) {
+                            updateHistoryOrderNumber(orderId, result.orderNumber);
+                        }
                         if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
                         setTimeout(() => tg.close(), 800);
                     }
@@ -1113,7 +1130,7 @@
             const userId = getHistoryUserId();
             if (!userId) return [];
             try {
-                const res = await fetch(`${ORDERS_URL}?clientId=${encodeURIComponent(userId)}`);
+                const res = await fetch(`${ORDERS_URL}?clientId=${encodeURIComponent(String(userId))}`);
                 const data = await res.json();
                 return data.ok && Array.isArray(data.orders) ? data.orders : [];
             } catch (e) { return []; }
@@ -1146,7 +1163,7 @@
             }
             if (item.timestamp) {
                 const ts = Number(item.timestamp);
-                const o = allOrders.find(x => x.timestamp && Math.abs(Number(x.timestamp) - ts) < 60000);
+                const o = allOrders.find(x => x.timestamp && Math.abs(Number(x.timestamp) - ts) < 120000);
                 if (o) return o;
             }
             if (item.orderId) {
@@ -1157,7 +1174,7 @@
                         const o = allOrders.find(x => {
                             const xParts = String(x.orderId || '').split('_');
                             const xTs = xParts.length >= 2 ? Number(xParts[xParts.length - 1]) : 0;
-                            return xTs > 0 && Math.abs(xTs - ts) < 60000;
+                            return xTs > 0 && Math.abs(xTs - ts) < 120000;
                         });
                         if (o) return o;
                     }
@@ -1200,7 +1217,11 @@
                 let orderStatusText = item.orderStatus || '';
                 let deliveryStatusText = item.deliveryStatus || '';
                 if (item.title === 'Заказ на выкуп') {
-                    const status = findOrderStatus(allOrders, item);
+                    let status = findOrderStatus(allOrders, item);
+                    if (!status && (item.orderNumber || item.orderId)) {
+                        status = await fetchOrderStatus(item.orderId, item.orderNumber);
+                        if (status) status = { orderId: item.orderId, orderNumber: item.orderNumber, ...status };
+                    }
                     if (status && !item.orderNumber) {
                         item.orderNumber = status.orderNumber;
                         historyUpdated = true;
