@@ -24,19 +24,28 @@ Write-Host "Deploying via curl..." -ForegroundColor Cyan
 $result = curl.exe -s -4 --connect-timeout 60 --max-time 300 -X PUT "https://api.cloudflare.com/client/v4/accounts/abd3a9f30b070ba7b27946ecb6b82945/workers/scripts/nwsnumbot" `
     -H "Authorization: Bearer $ApiToken" `
     -F "metadata=$metadata" `
-    -F "index.js=@$dir\index.js;type=application/javascript+module"
+    -F "index.js=@$dir\index.js;type=application/javascript+module" 2>&1
+
+if ([string]::IsNullOrWhiteSpace($result)) {
+    Write-Host "Empty response from curl. Check network, VPN, or token." -ForegroundColor Red
+    exit 1
+}
 
 try {
     $json = $result | ConvertFrom-Json
 } catch {
-    Write-Host "Response: $result" -ForegroundColor Red
+    Write-Host "Parse error. Raw response:" -ForegroundColor Red
+    Write-Host $result
     exit 1
 }
 if ($json.success) {
     Write-Host "OK: Worker deployed!" -ForegroundColor Green
 } else {
     Write-Host "Error:" -ForegroundColor Red
-    if ($json.errors) { $json.errors | ForEach-Object { Write-Host $_.message } }
-    else { Write-Host $result }
+    if ($json.errors -and $json.errors.Count -gt 0) {
+        $json.errors | ForEach-Object { Write-Host $_.message }
+    } else {
+        Write-Host "Full response: $result"
+    }
     exit 1
 }
