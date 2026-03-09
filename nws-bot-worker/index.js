@@ -922,8 +922,17 @@ async function invalidateAndRecreateTopic(env, clientChatId, from) {
 }
 
 function isThreadNotFound(result) {
-  return result && !result.ok && result.error_code === 400 &&
-    result.description && result.description.includes('thread not found');
+  if (!result || result.ok) return false;
+  const d = (result.description || '').toLowerCase();
+  return (result.error_code === 400 || result.error_code === 404) &&
+    (d.includes('thread not found') || d.includes('message thread not found') ||
+     d.includes('forum topic') || d.includes('topic not found'));
+}
+
+function sentToGeneral(result, expectedTopicId) {
+  if (!result || !result.ok || !expectedTopicId) return false;
+  const got = result.result?.message_thread_id;
+  return got === 1;
 }
 
 async function getClientForTopic(env, topicId) {
@@ -1356,7 +1365,15 @@ async function handleUpdate(update, env, workerUrl) {
   let topicId = await getOrCreateTopic(env, chatId, msg.from);
   if (topicId && !isGeneralTopic(env, topicId)) {
     let sent = await forwardClientMessageToTopic(env, msg, topicId);
-    if (sent && !sent.ok && isThreadNotFound(sent)) {
+    const needRetry = (sent && !sent.ok && isThreadNotFound(sent)) ||
+      (sent && sent.ok && sentToGeneral(sent, topicId));
+    if (needRetry) {
+      if (sent?.ok && sent.result?.message_id) {
+        await callTelegram(env, 'deleteMessage', {
+          chat_id: getGroupId(env),
+          message_id: sent.result.message_id
+        });
+      }
       topicId = await invalidateAndRecreateTopic(env, chatId, msg.from);
       if (topicId && !isGeneralTopic(env, topicId)) {
         await forwardClientMessageToTopic(env, msg, topicId);
