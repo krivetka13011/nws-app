@@ -943,9 +943,8 @@
                     const result = await res.json();
                     if (result.ok) {
                         apiOk = true;
-                        tg.showAlert('Заказ создан! Товары отправляются менеджеру в фоне.');
                         if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
-                        setTimeout(() => tg.close(), 1200);
+                        setTimeout(() => tg.close(), 800);
                     }
                 } catch (apiErr) {
                     console.error('API error, fallback to sendData:', apiErr);

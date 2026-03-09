@@ -134,6 +134,11 @@ export default {
           await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
             type: 'order', orderId, orderData, items, dest, isWhite, workerUrl: url.origin
           }));
+          await callTelegram(env, 'sendMessage', {
+            chat_id: chatId,
+            text: '✅ Ваш заказ получен и передан менеджеру.',
+            parse_mode: 'HTML'
+          });
           return jsonResponse({ ok: true, orderId, orderNumber, queued: true });
         }
 
@@ -171,6 +176,12 @@ export default {
           type: 'order', items, dest, isWhite, clientId: chatId,
           orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
         }));
+
+        await callTelegram(env, 'sendMessage', {
+          chat_id: chatId,
+          text: '✅ Ваш заказ получен и передан менеджеру.',
+          parse_mode: 'HTML'
+        });
 
         return jsonResponse({ ok: true, orderId, orderNumber, totalItems: items.length, processed: 0 });
       } catch (e) {
@@ -531,14 +542,20 @@ async function sendItemMedia(env, item, textMsg, dest) {
     return;
   }
 
-  const mediaBatchSize = 9;
+  const mediaBatchSize = 10;
   for (let start = 0; start < imgUrls.length; start += mediaBatchSize) {
     if (start > 0) await sleep(300);
     const batch = imgUrls.slice(start, start + mediaBatchSize);
+
+    if (batch.length === 1) {
+      await sendWithRetry(env, 'sendPhoto', {
+        ...dest, photo: batch[0], caption: textMsg, parse_mode: 'HTML'
+      });
+      continue;
+    }
+
     const media = batch.map((url, i) => {
-      if (start === 0 && i === 0) {
-        return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
-      }
+      if (i === 0) return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
       return { type: 'photo', media: url };
     });
 
@@ -549,23 +566,12 @@ async function sendItemMedia(env, item, textMsg, dest) {
       console.error('sendMediaGroup error:', err);
     }
 
-    // Fallback: text + individual photos
-    try {
-      await sendWithRetry(env, 'sendMessage', {
-        ...dest, text: textMsg, parse_mode: 'HTML', disable_web_page_preview: true
-      });
-    } catch (_) {}
-
     for (const photoUrl of batch) {
       try {
-        await callTelegram(env, 'sendPhoto', { ...dest, photo: photoUrl });
-      } catch (_) {
-        try {
-          await callTelegram(env, 'sendMessage', {
-            ...dest, text: `📸 <a href="${photoUrl}">Фото</a>`, parse_mode: 'HTML'
-          });
-        } catch (__) {}
-      }
+        await callTelegram(env, 'sendPhoto', {
+          ...dest, photo: photoUrl, caption: batch.indexOf(photoUrl) === 0 ? textMsg : undefined, parse_mode: 'HTML'
+        });
+      } catch (_) {}
     }
   }
 }
@@ -1185,7 +1191,7 @@ async function handleUpdate(update, env, workerUrl) {
 
     try {
       if (data.type === 'calc') {
-        await handleCalc(env, chatId, data);
+        await handleCalc(env, chatId, data, msg.from);
       } else if (data.type === 'order') {
         await handleOrder(env, chatId, msg.from, data, workerUrl);
       } else if (data.type === 'search') {
@@ -1328,19 +1334,42 @@ async function handleStart(env, chatId, from) {
   await addToBroadcastList(env, chatId);
 }
 
-async function handleCalc(env, chatId, data) {
+async function handleCalc(env, chatId, data, user) {
   const text =
     '  💠  <b>РАСЧЕТ ДОСТАВКИ NWS</b>\n\n' +
     `  📦  Коробка: ${data.boxName}\n` +
     `  📏  Габариты: ${data.l}x${data.w}x${data.h} см\n` +
+    `  ⚖️  Вес: ${data.weight || '—'} кг\n` +
     `  🪵  Обрешетка: ${data.hasCrate ? '  ✅  ' : '  ❌  '}\n` +
-    `  💰  <b>ИТОГО: ${data.packPrice} ₽</b>`;
+    `  💰  Предв. итог: ${data.packPrice} ₽`;
 
-  await callTelegram(env, 'sendMessage', {
-    chat_id: chatId,
-    text,
-    parse_mode: 'HTML'
-  });
+  const isCustom = data.boxName === 'Свой размер';
+  if (isCustom) {
+    const topicId = await getOrCreateTopic(env, chatId, user);
+    const groupId = getGroupId(env);
+    const dest = topicId && groupId
+      ? { chat_id: groupId, message_thread_id: topicId }
+      : { chat_id: Number(env.MANAGER_ID) };
+    const tag = user?.username ? `@${user.username}` : `ID: ${chatId}`;
+    const msgToManager = text + `\n\n  👤  Клиент: ${tag}\n  ⬇️  Ответьте на это сообщение — стоимость придёт клиенту.`;
+
+    await callTelegram(env, 'sendMessage', {
+      ...dest,
+      text: msgToManager,
+      parse_mode: 'HTML'
+    });
+    await callTelegram(env, 'sendMessage', {
+      chat_id: chatId,
+      text: '  📤  Запрос на расчёт отправлен менеджеру. Ответьте в чате бота — менеджер пришлёт стоимость.',
+      parse_mode: 'HTML'
+    });
+  } else {
+    await callTelegram(env, 'sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML'
+    });
+  }
 }
 
 // Серая: (цена + 30) × 1.05 × 13
