@@ -1,4 +1,4 @@
-// NWS Logistics Bot (deploy)
+// NWS Logistics Bot
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -371,8 +371,10 @@ export default {
       }
     }
 
-    // POST /api/upload-image — ImgBB + UploadMe fallback (оба бесплатные)
+    // POST /api/upload-image — только ImgBB
     if (request.method === 'POST' && url.pathname === '/api/upload-image') {
+      const key = env.IMGBB_KEY;
+      if (!key) return jsonResponse({ ok: false, error: 'IMGBB_KEY not configured' }, 500);
       try {
         const contentType = request.headers.get('Content-Type') || '';
         if (!contentType.includes('multipart/form-data')) {
@@ -383,57 +385,11 @@ export default {
         if (!image || !(image instanceof Blob)) {
           return jsonResponse({ ok: false, error: 'No image in form' }, 400);
         }
-        const fileName = image.name || 'image.jpg';
-
-        const tryImgLink = async () => {
-          try {
-            const fd = new FormData();
-            fd.append('file', image, fileName);
-            const r = await fetch('https://imglink.io/upload', { method: 'POST', body: fd });
-            const d = await r.json();
-            const url = d?.url || d?.direct_url || d?.URL;
-            if (url) return { url, thumb: (d?.thumb_url || d?.thumbnail_url) || url };
-          } catch (_) {}
-          return null;
-        };
-
-        const tryUploadMe = async () => {
-          const key = env.UPLOADME_KEY;
-          if (!key) return null;
-          for (const field of ['source', 'image']) {
-            try {
-              const fd = new FormData();
-              fd.append(field, image, fileName);
-              const r = await fetch(`https://uploadme.me/api/1/upload?key=${key}`, { method: 'POST', body: fd });
-              const d = await r.json();
-              const url = d?.URL || d?.url;
-              if (url) return { url, thumb: (d?.ThumbnailURL || d?.thumbnailURL || d?.thumb?.url) || url };
-            } catch (_) {}
-          }
-          return null;
-        };
-
-        const tryImgBB = async () => {
-          const key = env.IMGBB_KEY;
-          if (!key) return { ok: false };
-          const fd = new FormData();
-          fd.append('image', image, fileName);
-          const r = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: fd });
-          return r.json();
-        };
-
-        let res = await tryImgLink();
-        if (!res) res = await tryUploadMe();
-        if (!res) {
-          const imgbbRes = await tryImgBB();
-          if (imgbbRes.success && imgbbRes.data) {
-            const url = imgbbRes.data.url;
-            const thumb = (imgbbRes.data.thumb && imgbbRes.data.thumb.url) || url;
-            return jsonResponse({ success: true, data: { url, thumb: { url: thumb } } });
-          }
-          return jsonResponse(imgbbRes, 400);
-        }
-        return jsonResponse({ success: true, data: { url: res.url, thumb: { url: res.thumb } } });
+        const fd = new FormData();
+        fd.append('image', image, image.name || 'image.jpg');
+        const r = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: fd });
+        const data = await r.json();
+        return jsonResponse(data, r.ok ? 200 : 400);
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e.message || e) }, 500);
       }

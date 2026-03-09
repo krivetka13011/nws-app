@@ -22,7 +22,5 @@ WEBHOOK_SECRET = "nws-secret-123"  # можно поменять на любое
 GROUP_ID = "-1003737384929"
 # ID темы General (1 = стандартная тема для рассылок всем пользователям)
 GENERAL_TOPIC_ID = "1"
-# ImgBB API key (основной)
-IMGBB_KEY = "412d2791dd8620104d0849b745f489e0"
-# UploadMe API key (fallback при rate limit ImgBB) — бесплатно: https://uploadme.me/settings
-UPLOADME_KEY = "chv_g1_56b22d590f2a9504aaafb8b9fac193e11ffc648888dd50f6748e4c29b3f16b3388d63f0c2206070ea985b19272f3328d2b10e0cd7b2a32e9d8fa1c3cf7796325"
+# ImgBB API key — единственный вариант загрузки фото
+IMGBB_KEY = "f38c7a675a4c700c9e8fa0885c5b36d2"
