@@ -1,5 +1,4 @@
 // NWS Logistics Bot
-// deploy: 2026-03-09
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
