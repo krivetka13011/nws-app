@@ -864,8 +864,8 @@ async function getOrCreateTopic(env, clientChatId, from) {
         message_thread_id: topicId,
         action: 'typing'
       });
-      if (check && check.ok) return topicId;
-      // Тема удалена/закрыта — инвалидируем кэш
+      if (check && check.ok && !isGeneralTopic(env, topicId)) return topicId;
+      // Тема удалена/закрыта или это General — инвалидируем кэш
       await env.CLIENTS.delete(`topic_${topicId}`);
     } catch (_) {}
     await env.CLIENTS.delete(key);
@@ -886,9 +886,17 @@ async function getOrCreateTopic(env, clientChatId, from) {
   }
 
   const topicId = res.result.message_thread_id;
+  if (topicId === 1 || topicId === getGeneralTopicId(env)) {
+    console.error('createForumTopic returned General topic id:', topicId);
+    return null;
+  }
   await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
   await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
   return topicId;
+}
+
+function isGeneralTopic(env, topicId) {
+  return !topicId || topicId === 1 || topicId === getGeneralTopicId(env);
 }
 
 async function invalidateAndRecreateTopic(env, clientChatId, from) {
@@ -904,9 +912,10 @@ async function invalidateAndRecreateTopic(env, clientChatId, from) {
     await env.CLIENTS.delete(key);
   }
   const name = clientName(from);
-  const res = await callTelegram(env, 'createForumTopic', { chat_id: groupId, name });
+  const res = await callTelegram(env, 'createForumTopic', { chat_id: Number(groupId), name });
   if (!res.ok || !res.result) return null;
   const topicId = res.result.message_thread_id;
+  if (isGeneralTopic(env, topicId)) return null;
   await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
   await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
   return topicId;
@@ -1345,20 +1354,20 @@ async function handleUpdate(update, env, workerUrl) {
 
   // Обычное сообщение от клиента → переслать в тему + реакция OK
   let topicId = await getOrCreateTopic(env, chatId, msg.from);
-  if (topicId) {
+  let needForwardToManager = !topicId || isGeneralTopic(env, topicId);
+  if (topicId && !isGeneralTopic(env, topicId)) {
     let sent = await forwardClientMessageToTopic(env, msg, topicId);
     if (sent && !sent.ok && isThreadNotFound(sent)) {
       topicId = await invalidateAndRecreateTopic(env, chatId, msg.from);
-      if (topicId) sent = await forwardClientMessageToTopic(env, msg, topicId);
+      if (topicId && !isGeneralTopic(env, topicId)) {
+        sent = await forwardClientMessageToTopic(env, msg, topicId);
+      } else {
+        needForwardToManager = true;
+      }
     }
-    if (!topicId || (sent && !sent.ok)) {
-      await callTelegram(env, 'forwardMessage', {
-        chat_id: Number(env.MANAGER_ID),
-        from_chat_id: chatId,
-        message_id: msg.message_id
-      });
-    }
-  } else {
+    if (sent && !sent.ok) needForwardToManager = true;
+  }
+  if (needForwardToManager) {
     await callTelegram(env, 'forwardMessage', {
       chat_id: Number(env.MANAGER_ID),
       from_chat_id: chatId,
@@ -1375,7 +1384,7 @@ async function handleUpdate(update, env, workerUrl) {
 
 async function forwardClientMessageToTopic(env, msg, topicId) {
   const groupId = getGroupId(env);
-  if (!groupId) return null;
+  if (!groupId || !topicId || isGeneralTopic(env, topicId)) return null;
 
   const from = msg.from || {};
   const tag = from.username ? `@${from.username}` : clientName(from);
@@ -1446,7 +1455,24 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  await getOrCreateTopic(env, chatId, from);
+  let topicId = await getOrCreateTopic(env, chatId, from);
+  if (topicId && !isGeneralTopic(env, topicId)) {
+    const ping = await callTelegram(env, 'sendMessage', {
+      chat_id: getGroupId(env),
+      message_thread_id: topicId,
+      text: '👋'
+    });
+    if (ping && !ping.ok && isThreadNotFound(ping)) {
+      topicId = await invalidateAndRecreateTopic(env, chatId, from);
+      if (topicId) {
+        await callTelegram(env, 'sendMessage', {
+          chat_id: getGroupId(env),
+          message_thread_id: topicId,
+          text: '👋'
+        });
+      }
+    }
+  }
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
