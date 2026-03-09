@@ -22,7 +22,12 @@
 ```
 https://nwsnumbot.krivetkagames.workers.dev/clear-topic-cache?secret=nws-secret-123
 ```
-Для одного клиента: добавьте `&clientId=123456789` (ID чата клиента).
+При ошибке «KV list limit exceeded» используйте очистку по теме:
+```
+?secret=nws-secret-123&topicId=1480
+```
+Число `1480` берётся из ссылки на тему: `t.me/c/3737384929/1480` (последнее число).
+Или по ID клиента: `&clientId=123456789` (ID чата в Telegram).
 
 ### 4. Локальный push
 Запустите `git-push.bat` или:

@@ -319,10 +319,14 @@ export default {
       }
       try {
         let deleted = 0;
-        const clientId = url.searchParams.get('clientId');
+        let clientId = url.searchParams.get('clientId');
+        const topicIdParam = url.searchParams.get('topicId');
 
+        if (topicIdParam) {
+          const cid = await env.CLIENTS.get(`topic_${topicIdParam}`);
+          if (cid) clientId = cid;
+        }
         if (clientId) {
-          // Очистка только для одного клиента
           const key = `client_${clientId}`;
           const stored = await env.CLIENTS.get(key);
           if (stored) {
@@ -333,8 +337,9 @@ export default {
             await env.CLIENTS.delete(key);
             deleted += 2;
           }
-        } else {
-          // Полная очистка всех client_* и topic_*
+          return jsonResponse({ ok: true, deleted });
+        }
+        try {
           for (const prefix of ['client_', 'topic_']) {
             let list = await env.CLIENTS.list({ prefix });
             do {
@@ -346,8 +351,18 @@ export default {
               list = await env.CLIENTS.list({ prefix, cursor: list.cursor });
             } while (true);
           }
+          return jsonResponse({ ok: true, deleted });
+        } catch (listErr) {
+          const msg = String(listErr);
+          if (msg.includes('limit exceeded') || msg.includes('KV list')) {
+            return jsonResponse({
+              ok: false,
+              error: msg,
+              hint: 'Используйте ?clientId=ID или ?topicId=1480 (число из ссылки t.me/c/3737384929/1480)'
+            }, 429);
+          }
+          throw listErr;
         }
-        return jsonResponse({ ok: true, deleted });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
       }
