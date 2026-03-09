@@ -385,14 +385,31 @@ export default {
         }
         const fileName = image.name || 'image.jpg';
 
+        const tryImgLink = async () => {
+          try {
+            const fd = new FormData();
+            fd.append('file', image, fileName);
+            const r = await fetch('https://imglink.io/upload', { method: 'POST', body: fd });
+            const d = await r.json();
+            const url = d?.url || d?.direct_url || d?.URL;
+            if (url) return { url, thumb: (d?.thumb_url || d?.thumbnail_url) || url };
+          } catch (_) {}
+          return null;
+        };
+
         const tryUploadMe = async () => {
           const key = env.UPLOADME_KEY;
           if (!key) return null;
-          const fd = new FormData();
-          fd.append('image', image, fileName);
-          const r = await fetch(`https://uploadme.me/api/1/upload?key=${key}`, { method: 'POST', body: fd });
-          const d = await r.json();
-          if (d && d.URL) return { url: d.URL, thumb: d.ThumbnailURL || d.URL };
+          for (const field of ['source', 'image']) {
+            try {
+              const fd = new FormData();
+              fd.append(field, image, fileName);
+              const r = await fetch(`https://uploadme.me/api/1/upload?key=${key}`, { method: 'POST', body: fd });
+              const d = await r.json();
+              const url = d?.URL || d?.url;
+              if (url) return { url, thumb: (d?.ThumbnailURL || d?.thumbnailURL || d?.thumb?.url) || url };
+            } catch (_) {}
+          }
           return null;
         };
 
@@ -405,17 +422,18 @@ export default {
           return r.json();
         };
 
-        let res = await tryUploadMe();
-        if (res) {
-          return jsonResponse({ success: true, data: { url: res.url, thumb: { url: res.thumb } } });
+        let res = await tryImgLink();
+        if (!res) res = await tryUploadMe();
+        if (!res) {
+          const imgbbRes = await tryImgBB();
+          if (imgbbRes.success && imgbbRes.data) {
+            const url = imgbbRes.data.url;
+            const thumb = (imgbbRes.data.thumb && imgbbRes.data.thumb.url) || url;
+            return jsonResponse({ success: true, data: { url, thumb: { url: thumb } } });
+          }
+          return jsonResponse(imgbbRes, 400);
         }
-        const imgbbRes = await tryImgBB();
-        if (imgbbRes.success && imgbbRes.data) {
-          const url = imgbbRes.data.url;
-          const thumb = (imgbbRes.data.thumb && imgbbRes.data.thumb.url) || url;
-          return jsonResponse({ success: true, data: { url, thumb: { url: thumb } } });
-        }
-        return jsonResponse(imgbbRes, 400);
+        return jsonResponse({ success: true, data: { url: res.url, thumb: { url: res.thumb } } });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e.message || e) }, 500);
       }
