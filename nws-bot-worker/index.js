@@ -372,10 +372,23 @@ export default {
       }
     }
 
-    // POST /api/upload-image — прокси загрузки фото в ImgBB (обход CORS)
+    // GET /upload/:key — отдача фото из R2
+    if (request.method === 'GET' && url.pathname.startsWith('/upload/')) {
+      const key = decodeURIComponent(url.pathname.slice('/upload/'.length));
+      if (!key || key.includes('..')) return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+      if (!env.IMAGES) return new Response('Not configured', { status: 503, headers: CORS_HEADERS });
+      try {
+        const obj = await env.IMAGES.get(key);
+        if (!obj) return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+        const ct = obj.httpMetadata?.contentType || 'image/jpeg';
+        return new Response(obj.body, { headers: { 'Content-Type': ct, ...CORS_HEADERS } });
+      } catch (e) {
+        return new Response('Error', { status: 500, headers: CORS_HEADERS });
+      }
+    }
+
+    // POST /api/upload-image — R2 (приоритет) или ImgBB (fallback)
     if (request.method === 'POST' && url.pathname === '/api/upload-image') {
-      const imgbbKey = env.IMGBB_KEY;
-      if (!imgbbKey) return jsonResponse({ ok: false, error: 'IMGBB_KEY not configured' }, 500);
       try {
         const contentType = request.headers.get('Content-Type') || '';
         if (!contentType.includes('multipart/form-data')) {
@@ -386,6 +399,18 @@ export default {
         if (!image || !(image instanceof Blob)) {
           return jsonResponse({ ok: false, error: 'No image in form' }, 400);
         }
+
+        if (env.IMAGES) {
+          const ext = (image.name || '').split('.').pop() || 'jpg';
+          const key = `img/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const mime = image.type || (ext === 'png' ? 'image/png' : 'image/jpeg');
+          await env.IMAGES.put(key, image, { httpMetadata: { contentType: mime } });
+          const imgUrl = `${url.origin}/upload/${encodeURIComponent(key)}`;
+          return jsonResponse({ success: true, data: { url: imgUrl, thumb: { url: imgUrl } } });
+        }
+
+        const imgbbKey = env.IMGBB_KEY;
+        if (!imgbbKey) return jsonResponse({ ok: false, error: 'No storage configured' }, 500);
         const proxyForm = new FormData();
         proxyForm.append('image', image, image.name || 'image.jpg');
         const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, { method: 'POST', body: proxyForm });
