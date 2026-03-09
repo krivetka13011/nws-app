@@ -547,33 +547,61 @@ async function sendItemMedia(env, item, textMsg, dest) {
     if (start > 0) await sleep(300);
     const batch = imgUrls.slice(start, start + mediaBatchSize);
 
-    if (batch.length === 1) {
-      await sendWithRetry(env, 'sendPhoto', {
-        ...dest, photo: batch[0], caption: textMsg, parse_mode: 'HTML'
-      });
-      continue;
-    }
+    const sent = await sendMediaGroupWithUpload(env, batch, textMsg, dest);
+    if (sent) continue;
 
     const media = batch.map((url, i) => {
       if (i === 0) return { type: 'photo', media: url, caption: textMsg, parse_mode: 'HTML' };
       return { type: 'photo', media: url };
     });
+    const result = await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
+    if (result?.ok) continue;
 
-    try {
-      const result = await sendWithRetry(env, 'sendMediaGroup', { ...dest, media });
-      if (result?.ok) continue;
-    } catch (err) {
-      console.error('sendMediaGroup error:', err);
-    }
-
-    for (const photoUrl of batch) {
-      try {
+    if (batch.length === 1) {
+      await sendWithRetry(env, 'sendPhoto', {
+        ...dest, photo: batch[0], caption: textMsg, parse_mode: 'HTML'
+      });
+    } else {
+      for (let i = 0; i < batch.length; i++) {
         await callTelegram(env, 'sendPhoto', {
-          ...dest, photo: photoUrl, caption: batch.indexOf(photoUrl) === 0 ? textMsg : undefined, parse_mode: 'HTML'
+          ...dest, photo: batch[i], caption: i === 0 ? textMsg : undefined, parse_mode: 'HTML'
         });
-      } catch (_) {}
+        if (i < batch.length - 1) await sleep(200);
+      }
     }
   }
+}
+
+async function sendMediaGroupWithUpload(env, imgUrls, caption, dest) {
+  const media = [];
+  const formData = new FormData();
+  formData.append('chat_id', String(dest.chat_id));
+  if (dest.message_thread_id) formData.append('message_thread_id', String(dest.message_thread_id));
+
+  for (let i = 0; i < imgUrls.length; i++) {
+    try {
+      const r = await fetch(imgUrls[i]);
+      if (!r.ok) return false;
+      const blob = await r.blob();
+      const name = `photo${i}`;
+      formData.append(name, blob, `${name}.jpg`);
+      media.push({
+        type: 'photo',
+        media: `attach://${name}`,
+        ...(i === 0 ? { caption, parse_mode: 'HTML' } : {})
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+  formData.append('media', JSON.stringify(media));
+
+  const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMediaGroup`, {
+    method: 'POST',
+    body: formData
+  });
+  const data = await res.json().catch(() => ({}));
+  return !!data?.ok;
 }
 
 async function finishOrder(env, job) {
