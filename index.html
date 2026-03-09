@@ -573,9 +573,15 @@
                 let storageObj = JSON.parse(JSON.stringify(dataObj));
                 if (JSON.stringify(storageObj).length > 3500 && storageObj.itemsData) {
                     storageObj.itemsData = storageObj.itemsData.map(i => {
-                        const { imgUrls, ...rest } = i;
-                        return rest;
+                        const imgUrls = (i.imgUrls || []).slice(0, 2);
+                        return { ...i, imgUrls };
                     });
+                    if (JSON.stringify(storageObj).length > 25000) {
+                        storageObj.itemsData = storageObj.itemsData.map(i => {
+                            const { imgUrls, ...rest } = i;
+                            return rest;
+                        });
+                    }
                 }
                 const addToLocal = () => {
                     const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
