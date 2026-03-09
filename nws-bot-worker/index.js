@@ -201,19 +201,40 @@ export default {
 
       const job = JSON.parse(raw);
       const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-      const ITEMS_PER_CALL = 6;
+      const ITEMS_PER_CALL = 4;
       const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
 
       for (let idx = nextIdx; idx < end; idx++) {
-        if (idx > nextIdx) await sleep(300);
-        try {
-          if (job.type === 'order') {
-            await sendOrderItem(env, items[idx], idx, dest, isWhite);
-          } else {
-            await sendSearchItem(env, items[idx], idx, dest);
+        if (idx > nextIdx) await sleep(500);
+        let lastErr;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            if (job.type === 'order') {
+              await sendOrderItem(env, items[idx], idx, dest, isWhite);
+            } else {
+              await sendSearchItem(env, items[idx], idx, dest);
+            }
+            lastErr = null;
+            break;
+          } catch (e) {
+            lastErr = e;
+            console.error(`continue-order item ${idx} attempt ${attempt + 1}:`, e);
+            if (attempt < 2) await sleep(2000);
           }
-        } catch (e) {
-          console.error(`continue-order item ${idx}:`, e);
+        }
+        if (lastErr && dest.message_thread_id) {
+          try {
+            const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
+            const groupId = getGroupId(env);
+            const newDest = newTopicId ? { chat_id: groupId, message_thread_id: newTopicId } : { chat_id: Number(env.MANAGER_ID) };
+            job.dest = newDest;
+            Object.assign(dest, newDest);
+            await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
+            try {
+              if (job.type === 'order') await sendOrderItem(env, items[idx], idx, dest, isWhite);
+              else await sendSearchItem(env, items[idx], idx, dest);
+            } catch (_) {}
+          } catch (_) {}
         }
       }
 
@@ -410,19 +431,40 @@ async function processPendingOrdersCron(env) {
     if (!raw) return;
     const job = JSON.parse(raw);
     const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-    const ITEMS_PER_CALL = 6;
+    const ITEMS_PER_CALL = 4;
     const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
 
     for (let idx = nextIdx; idx < end; idx++) {
-      if (idx > nextIdx) await sleep(300);
-      try {
-        if (job.type === 'order') {
-          await sendOrderItem(env, items[idx], idx, dest, isWhite);
-        } else {
-          await sendSearchItem(env, items[idx], idx, dest);
+      if (idx > nextIdx) await sleep(500);
+      let lastErr;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          if (job.type === 'order') {
+            await sendOrderItem(env, items[idx], idx, dest, isWhite);
+          } else {
+            await sendSearchItem(env, items[idx], idx, dest);
+          }
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          console.error('cron item', idx, 'attempt', attempt + 1, e);
+          if (attempt < 2) await sleep(2000);
         }
-      } catch (e) {
-        console.error('cron item', idx, e);
+      }
+      if (lastErr && dest.message_thread_id) {
+        try {
+          const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
+          const groupId = getGroupId(env);
+          const newDest = newTopicId ? { chat_id: groupId, message_thread_id: newTopicId } : { chat_id: Number(env.MANAGER_ID) };
+          job.dest = newDest;
+          Object.assign(dest, newDest);
+          await env.CLIENTS.put(key, JSON.stringify(job));
+          try {
+            if (job.type === 'order') await sendOrderItem(env, items[idx], idx, dest, isWhite);
+            else await sendSearchItem(env, items[idx], idx, dest);
+          } catch (_) {}
+        } catch (_) {}
       }
     }
 
@@ -544,10 +586,14 @@ async function sendItemMedia(env, item, textMsg, dest) {
 
   const mediaBatchSize = 10;
   for (let start = 0; start < imgUrls.length; start += mediaBatchSize) {
-    if (start > 0) await sleep(300);
+    if (start > 0) await sleep(400);
     const batch = imgUrls.slice(start, start + mediaBatchSize);
 
-    const sent = await sendMediaGroupWithUpload(env, batch, textMsg, dest);
+    let sent = await sendMediaGroupWithUpload(env, batch, textMsg, dest);
+    if (!sent) {
+      await sleep(1000);
+      sent = await sendMediaGroupWithUpload(env, batch, textMsg, dest);
+    }
     if (sent) continue;
 
     const media = batch.map((url, i) => {
@@ -704,8 +750,12 @@ async function releaseOrderLock(env, clientId, workerUrl) {
     await env.CLIENTS.put(`order_by_num_${orderData.orderNumber}`, orderId);
 
     for (let idx = 0; idx < items.length; idx++) {
-      if (idx > 0) await sleep(300);
-      try { await sendOrderItem(env, items[idx], idx, dest, isWhite); } catch (_) {}
+      if (idx > 0) await sleep(500);
+      for (let a = 0; a < 3; a++) {
+        try { await sendOrderItem(env, items[idx], idx, dest, isWhite); break; } catch (e) {
+          if (a < 2) await sleep(2000);
+        }
+      }
     }
 
     try {
@@ -718,8 +768,12 @@ async function releaseOrderLock(env, clientId, workerUrl) {
     await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
 
     for (let idx = 0; idx < items.length; idx++) {
-      if (idx > 0) await sleep(300);
-      try { await sendSearchItem(env, items[idx], idx, dest); } catch (_) {}
+      if (idx > 0) await sleep(500);
+      for (let a = 0; a < 3; a++) {
+        try { await sendSearchItem(env, items[idx], idx, dest); break; } catch (e) {
+          if (a < 2) await sleep(2000);
+        }
+      }
     }
 
     await sendWithRetry(env, 'sendMessage', {
@@ -1498,11 +1552,15 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
   await addToBroadcastList(env, chatId);
 
   for (let idx = 0; idx < items.length; idx++) {
-    if (idx > 0) await sleep(300);
-    try {
-      await sendOrderItem(env, items[idx], idx, dest, isWhite);
-    } catch (e) {
-      console.error(`handleOrder item ${idx} error:`, e);
+    if (idx > 0) await sleep(500);
+    for (let a = 0; a < 3; a++) {
+      try {
+        await sendOrderItem(env, items[idx], idx, dest, isWhite);
+        break;
+      } catch (e) {
+        console.error(`handleOrder item ${idx} attempt ${a + 1}:`, e);
+        if (a < 2) await sleep(2000);
+      }
     }
   }
 
@@ -1555,11 +1613,15 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
   }
 
   for (let idx = 0; idx < items.length; idx++) {
-    if (idx > 0) await sleep(300);
-    try {
-      await sendSearchItem(env, items[idx], idx, dest);
-    } catch (e) {
-      console.error(`handleSearch item ${idx} error:`, e);
+    if (idx > 0) await sleep(500);
+    for (let a = 0; a < 3; a++) {
+      try {
+        await sendSearchItem(env, items[idx], idx, dest);
+        break;
+      } catch (e) {
+        console.error(`handleSearch item ${idx} attempt ${a + 1}:`, e);
+        if (a < 2) await sleep(2000);
+      }
     }
   }
 
