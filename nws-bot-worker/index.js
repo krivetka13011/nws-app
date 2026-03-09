@@ -121,7 +121,7 @@ export default {
         };
 
         // Topic creation, summary, pin — synchronously
-        const topicId = await getOrCreateTopic(env, chatId, user);
+        const { topicId } = await getOrCreateTopic(env, chatId, user);
         const groupId = getGroupId(env);
         let dest = topicId
           ? { chat_id: groupId, message_thread_id: topicId }
@@ -851,7 +851,7 @@ function clientName(from) {
 
 async function getOrCreateTopic(env, clientChatId, from) {
   const groupId = getGroupId(env);
-  if (!groupId || !env.CLIENTS) return null;
+  if (!groupId || !env.CLIENTS) return { topicId: null, created: false };
 
   const key = `client_${clientChatId}`;
   let stored = await env.CLIENTS.get(key);
@@ -864,7 +864,7 @@ async function getOrCreateTopic(env, clientChatId, from) {
         message_thread_id: topicId,
         action: 'typing'
       });
-      if (check && check.ok && !isGeneralTopic(env, topicId)) return topicId;
+      if (check && check.ok && !isGeneralTopic(env, topicId)) return { topicId, created: false };
       // Тема удалена/закрыта или это General — инвалидируем кэш
       await env.CLIENTS.delete(`topic_${topicId}`);
     } catch (_) {}
@@ -882,17 +882,17 @@ async function getOrCreateTopic(env, clientChatId, from) {
       chat_id: Number(env.MANAGER_ID),
       text: `⚠️ Не удалось создать тему для клиента ${clientChatId}:\n${res.error_code || ''} ${res.description || ''}\n\nПроверьте: бот — админ с правом «Управление темами», группа — режим форума включён.`
     });
-    return null;
+    return { topicId: null, created: false };
   }
 
   const topicId = res.result.message_thread_id;
   if (topicId === 1 || topicId === getGeneralTopicId(env)) {
     console.error('createForumTopic returned General topic id:', topicId);
-    return null;
+    return { topicId: null, created: false };
   }
   await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
   await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
-  return topicId;
+  return { topicId, created: true };
 }
 
 function isGeneralTopic(env, topicId) {
@@ -1362,7 +1362,7 @@ async function handleUpdate(update, env, workerUrl) {
   }
 
   // Обычное сообщение от клиента → переслать в тему + реакция OK
-  let topicId = await getOrCreateTopic(env, chatId, msg.from);
+  let { topicId } = await getOrCreateTopic(env, chatId, msg.from);
   if (topicId && !isGeneralTopic(env, topicId)) {
     let sent = await forwardClientMessageToTopic(env, msg, topicId);
     const needRetry = (sent && !sent.ok && isThreadNotFound(sent)) ||
@@ -1467,24 +1467,8 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  let topicId = await getOrCreateTopic(env, chatId, from);
-  if (topicId && !isGeneralTopic(env, topicId)) {
-    const ping = await callTelegram(env, 'sendMessage', {
-      chat_id: getGroupId(env),
-      message_thread_id: topicId,
-      text: '👋'
-    });
-    if (ping && !ping.ok && isThreadNotFound(ping)) {
-      topicId = await invalidateAndRecreateTopic(env, chatId, from);
-      if (topicId) {
-        await callTelegram(env, 'sendMessage', {
-          chat_id: getGroupId(env),
-          message_thread_id: topicId,
-          text: '👋'
-        });
-      }
-    }
-  }
+  const { created } = await getOrCreateTopic(env, chatId, from);
+  if (!created) return;
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
@@ -1532,7 +1516,7 @@ async function handleCalc(env, chatId, data, user) {
 
   const isCustom = data.boxName === 'Свой размер';
   if (isCustom) {
-    const topicId = await getOrCreateTopic(env, chatId, user);
+    const { topicId } = await getOrCreateTopic(env, chatId, user);
     const groupId = getGroupId(env);
     const dest = topicId && groupId
       ? { chat_id: groupId, message_thread_id: topicId }
@@ -1570,7 +1554,7 @@ function calcRub(priceYuan, isWhite) {
 async function handleOrder(env, chatId, user, data, workerUrl) {
   const items = Array.isArray(data.items) ? data.items : [];
   const isWhite = /белая|white/i.test(data.deliveryType || '');
-  const topicId = await getOrCreateTopic(env, chatId, user);
+  const { topicId } = await getOrCreateTopic(env, chatId, user);
   const groupId = getGroupId(env);
 
   const totalRub = items.reduce((sum, it) => sum + calcRub(it.price ?? it.resYuan ?? 0, isWhite), 0);
@@ -1686,7 +1670,7 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     return;
   }
 
-  const topicId = await getOrCreateTopic(env, chatId, user);
+  const { topicId } = await getOrCreateTopic(env, chatId, user);
   const groupId = getGroupId(env);
   let dest = topicId
     ? { chat_id: groupId, message_thread_id: topicId }

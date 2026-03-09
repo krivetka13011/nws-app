@@ -17,7 +17,14 @@
 - **Автоматически:** при каждом `git push` (если менялись файлы в `nws-bot-worker/`)
 - **Вручную:** GitHub → Actions → Deploy Worker → Run workflow
 
-### 3. Локальный push
+### 3. Очистка кэша тем
+Откройте в браузере (подставьте свой secret):
+```
+https://nwsnumbot.krivetkagames.workers.dev/clear-topic-cache?secret=nws-secret-123
+```
+Для одного клиента: добавьте `&clientId=123456789` (ID чата клиента).
+
+### 4. Локальный push
 Запустите `git-push.bat` или:
 ```cmd
 cd "c:\Users\User\Downloads\tg bot cursor"
