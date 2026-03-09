@@ -1344,9 +1344,20 @@ async function handleUpdate(update, env, workerUrl) {
   }
 
   // Обычное сообщение от клиента → переслать в тему + реакция OK
-  const topicId = await getOrCreateTopic(env, chatId, msg.from);
+  let topicId = await getOrCreateTopic(env, chatId, msg.from);
   if (topicId) {
-    await forwardClientMessageToTopic(env, msg, topicId);
+    let sent = await forwardClientMessageToTopic(env, msg, topicId);
+    if (sent && !sent.ok && isThreadNotFound(sent)) {
+      topicId = await invalidateAndRecreateTopic(env, chatId, msg.from);
+      if (topicId) sent = await forwardClientMessageToTopic(env, msg, topicId);
+    }
+    if (!topicId || (sent && !sent.ok)) {
+      await callTelegram(env, 'forwardMessage', {
+        chat_id: Number(env.MANAGER_ID),
+        from_chat_id: chatId,
+        message_id: msg.message_id
+      });
+    }
   } else {
     await callTelegram(env, 'forwardMessage', {
       chat_id: Number(env.MANAGER_ID),
@@ -1364,42 +1375,44 @@ async function handleUpdate(update, env, workerUrl) {
 
 async function forwardClientMessageToTopic(env, msg, topicId) {
   const groupId = getGroupId(env);
-  if (!groupId) return;
+  if (!groupId) return null;
 
   const from = msg.from || {};
   const tag = from.username ? `@${from.username}` : clientName(from);
   const opts = { chat_id: groupId, message_thread_id: topicId };
 
+  let res = null;
   if (msg.text) {
-    await callTelegram(env, 'sendMessage', {
+    res = await callTelegram(env, 'sendMessage', {
       ...opts,
       text: `${msg.text}\n\n— ${tag}`
     });
   } else if (msg.photo && msg.photo.length) {
     const photo = msg.photo[msg.photo.length - 1];
     const caption = msg.caption ? `${msg.caption}\n\n— ${tag}` : `— ${tag}`;
-    await callTelegram(env, 'sendPhoto', { ...opts, photo: photo.file_id, caption });
+    res = await callTelegram(env, 'sendPhoto', { ...opts, photo: photo.file_id, caption });
   } else if (msg.document) {
-    await callTelegram(env, 'sendDocument', {
+    res = await callTelegram(env, 'sendDocument', {
       ...opts,
       document: msg.document.file_id,
       caption: `— ${tag}`
     });
   } else if (msg.voice) {
-    await callTelegram(env, 'sendVoice', {
+    res = await callTelegram(env, 'sendVoice', {
       ...opts,
       voice: msg.voice.file_id,
       caption: `— ${tag}`
     });
   } else if (msg.video) {
-    await callTelegram(env, 'sendVideo', {
+    res = await callTelegram(env, 'sendVideo', {
       ...opts,
       video: msg.video.file_id,
       caption: `— ${tag}`
     });
   } else if (msg.sticker) {
-    await callTelegram(env, 'sendSticker', { ...opts, sticker: msg.sticker.file_id });
+    res = await callTelegram(env, 'sendSticker', { ...opts, sticker: msg.sticker.file_id });
   }
+  return res;
 }
 
 async function forwardManagerReplyToClient(env, msg, clientId) {
