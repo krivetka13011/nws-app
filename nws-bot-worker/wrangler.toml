@@ -22,3 +22,5 @@ WEBHOOK_SECRET = "nws-secret-123"  # можно поменять на любое
 GROUP_ID = "-1003737384929"
 # ID темы General (1 = стандартная тема для рассылок всем пользователям)
 GENERAL_TOPIC_ID = "1"
+# ImgBB API key для прокси загрузки фото (обход CORS)
+IMGBB_KEY = "412d2791dd8620104d0849b745f489e0"

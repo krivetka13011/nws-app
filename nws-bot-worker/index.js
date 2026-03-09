@@ -371,6 +371,33 @@ export default {
       }
     }
 
+    // POST /api/upload-image — прокси загрузки фото в ImgBB (обход CORS)
+    if (request.method === 'POST' && url.pathname === '/api/upload-image') {
+      const imgbbKey = env.IMGBB_KEY;
+      if (!imgbbKey) return jsonResponse({ ok: false, error: 'IMGBB_KEY not configured' }, 500);
+      try {
+        const contentType = request.headers.get('Content-Type') || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return jsonResponse({ ok: false, error: 'Expected multipart/form-data' }, 400);
+        }
+        const formData = await request.formData();
+        const image = formData.get('image');
+        if (!image || !(image instanceof Blob)) {
+          return jsonResponse({ ok: false, error: 'No image in form' }, 400);
+        }
+        const proxyForm = new FormData();
+        proxyForm.append('image', image, image.name || 'image.jpg');
+        const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
+          method: 'POST',
+          body: proxyForm
+        });
+        const data = await res.json();
+        return jsonResponse(data, res.ok ? 200 : 400);
+      } catch (e) {
+        return jsonResponse({ ok: false, error: String(e.message || e) }, 500);
+      }
+    }
+
     // Переустановить webhook (включая callback_query)
     if (request.method === 'GET' && url.pathname === '/set-webhook') {
       const webhookUrl = `${url.origin}/webhook/${env.WEBHOOK_SECRET}`;

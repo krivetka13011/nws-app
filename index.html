@@ -507,7 +507,6 @@
     </div>
 
     <script>
-        const IMGBB_KEY = '412d2791dd8620104d0849b745f489e0'; 
         const tg = window.Telegram.WebApp;
         tg.expand();
         tg.setHeaderColor('#050505');
@@ -1055,11 +1054,11 @@
                     const compressedBlob = await compressImage(file);
                     const formData = new FormData();
                     formData.append("image", compressedBlob, file.name);
-                    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: "POST", body: formData });
+                    const response = await fetch(`${WORKER_URL}/api/upload-image`, { method: "POST", body: formData });
                     const data = await response.json();
                     document.getElementById(loadId).remove();
-                    if (data.success) {
-                        const imgUrl = data.data.url; const thumbUrl = data.data.thumb.url;
+                    if (data.success && data.data) {
+                        const imgUrl = data.data.url; const thumbUrl = (data.data.thumb && data.data.thumb.url) || imgUrl;
                         const list = type === 'order' ? orderItems : searchItems;
                         const item = list.find(i => i.id === id);
                         if (item) item.imgUrls.push(imgUrl);
@@ -1067,7 +1066,10 @@
                         imgDiv.className = 'preview-item';
                         imgDiv.innerHTML = `<img src="${thumbUrl}" onclick="openLightbox('${imgUrl}')"><div class="preview-remove" onclick="removeImage(${id}, '${imgUrl}', '${type}', this)"><i class="fas fa-times"></i></div>`;
                         btnLabel.insertAdjacentElement('beforebegin', imgDiv);
-                    } else { alert("Ошибка загрузки фото"); }
+                    } else {
+                        const errMsg = data.error?.message || data.error || (data.data && data.data.error && data.data.error.message) || "Ошибка загрузки фото";
+                        alert("Ошибка загрузки фото: " + errMsg);
+                    }
                 } catch (error) {
                     if(document.getElementById(loadId)) document.getElementById(loadId).remove();
                     alert("Ошибка сети");
