@@ -1,4 +1,4 @@
-// NWS Logistics Bot (auto-deploy test)
+// NWS Logistics Bot
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
