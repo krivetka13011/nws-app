@@ -1,11 +1,8 @@
 # Деплой Worker
 
-## R2 (фото без лимитов)
-Чтобы убрать лимиты ImgBB, включите R2 и запустите:
-```powershell
-.\setup-r2-and-deploy.ps1
-```
-Скрипт откроет Dashboard для включения R2 (если нужно), создаст bucket и задеплоит.
+## Фото: fallback при rate limit
+При лимите ImgBB автоматически используется UploadMe. Добавьте бесплатный ключ в wrangler.toml:
+`UPLOADME_KEY = "ваш_ключ"` — получить: https://uploadme.me/settings
 
 ## Токен
 Токен хранится в `.env.deploy` (не в git). Для деплоя используется он.

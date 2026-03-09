@@ -372,22 +372,7 @@ export default {
       }
     }
 
-    // GET /upload/:key — отдача фото из R2
-    if (request.method === 'GET' && url.pathname.startsWith('/upload/')) {
-      const key = decodeURIComponent(url.pathname.slice('/upload/'.length));
-      if (!key || key.includes('..')) return new Response('Not found', { status: 404, headers: CORS_HEADERS });
-      if (!env.IMAGES) return new Response('Not configured', { status: 503, headers: CORS_HEADERS });
-      try {
-        const obj = await env.IMAGES.get(key);
-        if (!obj) return new Response('Not found', { status: 404, headers: CORS_HEADERS });
-        const ct = obj.httpMetadata?.contentType || 'image/jpeg';
-        return new Response(obj.body, { headers: { 'Content-Type': ct, ...CORS_HEADERS } });
-      } catch (e) {
-        return new Response('Error', { status: 500, headers: CORS_HEADERS });
-      }
-    }
-
-    // POST /api/upload-image — R2 (приоритет) или ImgBB (fallback)
+    // POST /api/upload-image — ImgBB + UploadMe fallback (оба бесплатные)
     if (request.method === 'POST' && url.pathname === '/api/upload-image') {
       try {
         const contentType = request.headers.get('Content-Type') || '';
@@ -399,23 +384,39 @@ export default {
         if (!image || !(image instanceof Blob)) {
           return jsonResponse({ ok: false, error: 'No image in form' }, 400);
         }
+        const fileName = image.name || 'image.jpg';
 
-        if (env.IMAGES) {
-          const ext = (image.name || '').split('.').pop() || 'jpg';
-          const key = `img/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          const mime = image.type || (ext === 'png' ? 'image/png' : 'image/jpeg');
-          await env.IMAGES.put(key, image, { httpMetadata: { contentType: mime } });
-          const imgUrl = `${url.origin}/upload/${encodeURIComponent(key)}`;
-          return jsonResponse({ success: true, data: { url: imgUrl, thumb: { url: imgUrl } } });
+        const tryImgBB = async () => {
+          const key = env.IMGBB_KEY;
+          if (!key) return { ok: false };
+          const fd = new FormData();
+          fd.append('image', image, fileName);
+          const r = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: fd });
+          return r.json();
+        };
+
+        const tryUploadMe = async () => {
+          const key = env.UPLOADME_KEY;
+          if (!key) return null;
+          const fd = new FormData();
+          fd.append('image', image, fileName);
+          const r = await fetch(`https://uploadme.me/api/1/upload?key=${key}`, { method: 'POST', body: fd });
+          const d = await r.json();
+          if (d && d.URL) return { url: d.URL, thumb: d.ThumbnailURL || d.URL };
+          return null;
+        };
+
+        let imgbbRes = await tryImgBB();
+        if (imgbbRes.success && imgbbRes.data) {
+          const url = imgbbRes.data.url;
+          const thumb = (imgbbRes.data.thumb && imgbbRes.data.thumb.url) || url;
+          return jsonResponse({ success: true, data: { url, thumb: { url: thumb } } });
         }
-
-        const imgbbKey = env.IMGBB_KEY;
-        if (!imgbbKey) return jsonResponse({ ok: false, error: 'No storage configured' }, 500);
-        const proxyForm = new FormData();
-        proxyForm.append('image', image, image.name || 'image.jpg');
-        const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, { method: 'POST', body: proxyForm });
-        const data = await res.json();
-        return jsonResponse(data, res.ok ? 200 : 400);
+        const uploadMeRes = await tryUploadMe();
+        if (uploadMeRes) {
+          return jsonResponse({ success: true, data: { url: uploadMeRes.url, thumb: { url: uploadMeRes.thumb } } });
+        }
+        return jsonResponse(imgbbRes, 400);
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e.message || e) }, 500);
       }
