@@ -800,9 +800,17 @@ async function getOrCreateTopic(env, clientChatId, from) {
   let stored = await env.CLIENTS.get(key);
   if (stored) {
     try {
-      const { topicId } = JSON.parse(stored);
-      return topicId;
+      const parsed = JSON.parse(stored);
+      const topicId = parsed.topicId;
+      const check = await callTelegram(env, 'sendChatAction', {
+        chat_id: groupId,
+        message_thread_id: topicId,
+        action: 'typing'
+      });
+      if (!isThreadNotFound(check)) return topicId;
+      await env.CLIENTS.delete(`topic_${topicId}`);
     } catch (_) {}
+    await env.CLIENTS.delete(key);
   }
 
   const name = clientName(from);
@@ -1360,7 +1368,7 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  await invalidateAndRecreateTopic(env, chatId, from);
+  await getOrCreateTopic(env, chatId, from);
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
