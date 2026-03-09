@@ -1482,8 +1482,7 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  const { created } = await getOrCreateTopic(env, chatId, from);
-  if (!created) return;
+  await getOrCreateTopic(env, chatId, from);
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
