@@ -786,10 +786,10 @@ function getGeneralTopicId(env) {
 }
 
 function clientName(from) {
-  if (!from) return 'Клиент';
-  const name = (from.first_name || from.last_name || 'Клиент').trim();
-  const username = from.username ? `@${from.username}` : '';
-  return username ? `${name} | ${username}` : name;
+  if (!from) return 'Клиент | —';
+  const name = (from.first_name || from.last_name || '').trim() || 'Клиент';
+  const username = from.username ? `@${from.username}` : '—';
+  return `${name} | ${username}`;
 }
 
 async function getOrCreateTopic(env, clientChatId, from) {
@@ -1360,7 +1360,7 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  const topicId = await getOrCreateTopic(env, chatId, from);
+  await invalidateAndRecreateTopic(env, chatId, from);
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
