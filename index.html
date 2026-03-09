@@ -1035,6 +1035,9 @@
         }
 
         const MAX_PHOTOS_PER_ITEM = 9;
+        const UPLOAD_DELAY_MS = 2500;
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
         async function handleImageUpload(input, id, type) {
             let files = Array.from(input.files); if (!files.length) return;
@@ -1047,6 +1050,7 @@
             const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
             const btnLabel = previewArea.querySelector('label');
             for (let i = 0; i < files.length; i++) {
+                if (i > 0) await sleep(UPLOAD_DELAY_MS);
                 const file = files[i]; const loadId = `load-${Date.now()}-${i}`;
                 const loadingHtml = `<div id="${loadId}" class="photo-btn animate-pulse border-none"><i class="fas fa-spinner fa-spin text-white"></i></div>`;
                 btnLabel.insertAdjacentHTML('beforebegin', loadingHtml);
@@ -1067,7 +1071,9 @@
                         imgDiv.innerHTML = `<img src="${thumbUrl}" onclick="openLightbox('${imgUrl}')"><div class="preview-remove" onclick="removeImage(${id}, '${imgUrl}', '${type}', this)"><i class="fas fa-times"></i></div>`;
                         btnLabel.insertAdjacentElement('beforebegin', imgDiv);
                     } else {
-                        const errMsg = data.error?.message || data.error || (data.data && data.data.error && data.data.error.message) || "Ошибка загрузки фото";
+                        const rawErr = data.error?.message || data.error || (data.data && data.data.error && (data.data.error.message || data.data.error)) || "";
+                        const isRateLimit = /rate limit|too many|лимит/i.test(rawErr);
+                        const errMsg = isRateLimit ? "Лимит загрузок. Подождите 1–2 минуты и попробуйте снова." : (rawErr || "Ошибка загрузки фото");
                         alert("Ошибка загрузки фото: " + errMsg);
                     }
                 } catch (error) {

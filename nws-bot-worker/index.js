@@ -388,10 +388,7 @@ export default {
         }
         const proxyForm = new FormData();
         proxyForm.append('image', image, image.name || 'image.jpg');
-        const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, {
-          method: 'POST',
-          body: proxyForm
-        });
+        const res = await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`, { method: 'POST', body: proxyForm });
         const data = await res.json();
         return jsonResponse(data, res.ok ? 200 : 400);
       } catch (e) {
