@@ -25,4 +25,4 @@ GENERAL_TOPIC_ID = "1"
 # ImgBB API key (основной)
 IMGBB_KEY = "412d2791dd8620104d0849b745f489e0"
 # UploadMe API key (fallback при rate limit ImgBB) — бесплатно: https://uploadme.me/settings
-UPLOADME_KEY = ""
+UPLOADME_KEY = "chv_g1_56b22d590f2a9504aaafb8b9fac193e11ffc648888dd50f6748e4c29b3f16b3388d63f0c2206070ea985b19272f3328d2b10e0cd7b2a32e9d8fa1c3cf7796325"
