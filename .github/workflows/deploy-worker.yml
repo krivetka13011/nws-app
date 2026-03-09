@@ -1,9 +1,9 @@
 name: Deploy Worker
 on:
   push:
+    branches: [main]
     paths:
-      - 'nws-bot-worker/index.js'
-      - 'nws-bot-worker/wrangler.toml'
+      - 'nws-bot-worker/**'
   workflow_dispatch:
 
 jobs:
@@ -18,3 +18,11 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: nws-bot-worker
           command: deploy
+
+      - name: Notify deploy success
+        if: success()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=1159166497" \
+            -d "text=✅ Деплой NWS Worker прошёл успешно!"
