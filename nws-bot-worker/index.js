@@ -296,6 +296,50 @@ export default {
       });
     }
 
+    // Очистка кэша тем (client_*, topic_*)
+    // GET /clear-topic-cache?secret=WEBHOOK_SECRET
+    // Опционально: ?clientId=123 — очистить только кэш этого клиента
+    if (request.method === 'GET' && url.pathname === '/clear-topic-cache') {
+      const secret = url.searchParams.get('secret');
+      if (secret !== env.WEBHOOK_SECRET || !env.CLIENTS) {
+        return jsonResponse({ ok: false }, 403);
+      }
+      try {
+        let deleted = 0;
+        const clientId = url.searchParams.get('clientId');
+
+        if (clientId) {
+          // Очистка только для одного клиента
+          const key = `client_${clientId}`;
+          const stored = await env.CLIENTS.get(key);
+          if (stored) {
+            try {
+              const { topicId } = JSON.parse(stored);
+              await env.CLIENTS.delete(`topic_${topicId}`);
+            } catch (_) {}
+            await env.CLIENTS.delete(key);
+            deleted += 2;
+          }
+        } else {
+          // Полная очистка всех client_* и topic_*
+          for (const prefix of ['client_', 'topic_']) {
+            let list = await env.CLIENTS.list({ prefix });
+            do {
+              for (const k of list.keys) {
+                await env.CLIENTS.delete(k.name);
+                deleted++;
+              }
+              if (list.list_complete) break;
+              list = await env.CLIENTS.list({ prefix, cursor: list.cursor });
+            } while (true);
+          }
+        }
+        return jsonResponse({ ok: true, deleted });
+      } catch (e) {
+        return jsonResponse({ ok: false, error: String(e) }, 500);
+      }
+    }
+
     // API списка заказов клиента для WebApp (история)
     if (request.method === 'GET' && (url.pathname === '/orders' || url.pathname === '/api/orders')) {
       const clientId = url.searchParams.get('clientId');
@@ -807,18 +851,22 @@ async function getOrCreateTopic(env, clientChatId, from) {
         message_thread_id: topicId,
         action: 'typing'
       });
-      if (!isThreadNotFound(check)) return topicId;
+      if (check && check.ok) return topicId;
+      // Тема удалена/закрыта — инвалидируем кэш
       await env.CLIENTS.delete(`topic_${topicId}`);
     } catch (_) {}
     await env.CLIENTS.delete(key);
   }
 
-  const name = clientName(from);
-  const res = await callTelegram(env, 'createForumTopic', {
+  const name = clientName(from || {});
+  let res = await callTelegram(env, 'createForumTopic', {
     chat_id: groupId,
     name
   });
-  if (!res.ok || !res.result) return null;
+  if (!res.ok || !res.result) {
+    console.error('createForumTopic failed:', res.error_code, res.description);
+    return null;
+  }
 
   const topicId = res.result.message_thread_id;
   await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
