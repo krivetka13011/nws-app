@@ -385,15 +385,6 @@ export default {
         }
         const fileName = image.name || 'image.jpg';
 
-        const tryImgBB = async () => {
-          const key = env.IMGBB_KEY;
-          if (!key) return { ok: false };
-          const fd = new FormData();
-          fd.append('image', image, fileName);
-          const r = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: fd });
-          return r.json();
-        };
-
         const tryUploadMe = async () => {
           const key = env.UPLOADME_KEY;
           if (!key) return null;
@@ -405,15 +396,24 @@ export default {
           return null;
         };
 
-        let imgbbRes = await tryImgBB();
+        const tryImgBB = async () => {
+          const key = env.IMGBB_KEY;
+          if (!key) return { ok: false };
+          const fd = new FormData();
+          fd.append('image', image, fileName);
+          const r = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, { method: 'POST', body: fd });
+          return r.json();
+        };
+
+        let res = await tryUploadMe();
+        if (res) {
+          return jsonResponse({ success: true, data: { url: res.url, thumb: { url: res.thumb } } });
+        }
+        const imgbbRes = await tryImgBB();
         if (imgbbRes.success && imgbbRes.data) {
           const url = imgbbRes.data.url;
           const thumb = (imgbbRes.data.thumb && imgbbRes.data.thumb.url) || url;
           return jsonResponse({ success: true, data: { url, thumb: { url: thumb } } });
-        }
-        const uploadMeRes = await tryUploadMe();
-        if (uploadMeRes) {
-          return jsonResponse({ success: true, data: { url: uploadMeRes.url, thumb: { url: uploadMeRes.thumb } } });
         }
         return jsonResponse(imgbbRes, 400);
       } catch (e) {
