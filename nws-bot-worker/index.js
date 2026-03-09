@@ -81,7 +81,7 @@ export default {
       } catch (_) {
         return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
       }
-      const { userId, username, firstName, lastName, items, deliveryType, timestamp } = body;
+      const { userId, username, firstName = '', lastName = '', items, deliveryType, timestamp } = body;
       if (!userId || !items || !Array.isArray(items) || items.length === 0) {
         return jsonResponse({ ok: false, error: 'userId and items required' }, 400);
       }
@@ -96,7 +96,7 @@ export default {
           return sum + (Number.isNaN(v) ? 0 : v);
         }, 0);
 
-        const usernameStr = username ? `@${username}` : `ID: ${chatId}`;
+        const usernameStr = username ? `@${username}` : (firstName || lastName ? `${(firstName || '').trim()} ${(lastName || '').trim()}`.trim() : 'Клиент');
         const orderNumber = await getAndIncrementOrderCounter(env);
         const deliveryInfo = deliveryType || '';
         const summaryText =
@@ -221,20 +221,6 @@ export default {
             console.error(`continue-order item ${idx} attempt ${attempt + 1}:`, e);
             if (attempt < 2) await sleep(2000);
           }
-        }
-        if (lastErr && dest.message_thread_id) {
-          try {
-            const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
-            const groupId = getGroupId(env);
-            const newDest = newTopicId ? { chat_id: groupId, message_thread_id: newTopicId } : { chat_id: Number(env.MANAGER_ID) };
-            job.dest = newDest;
-            Object.assign(dest, newDest);
-            await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
-            try {
-              if (job.type === 'order') await sendOrderItem(env, items[idx], idx, dest, isWhite);
-              else await sendSearchItem(env, items[idx], idx, dest);
-            } catch (_) {}
-          } catch (_) {}
         }
       }
 
@@ -451,20 +437,6 @@ async function processPendingOrdersCron(env) {
           console.error('cron item', idx, 'attempt', attempt + 1, e);
           if (attempt < 2) await sleep(2000);
         }
-      }
-      if (lastErr && dest.message_thread_id) {
-        try {
-          const newTopicId = await invalidateAndRecreateTopic(env, clientId, { id: clientId });
-          const groupId = getGroupId(env);
-          const newDest = newTopicId ? { chat_id: groupId, message_thread_id: newTopicId } : { chat_id: Number(env.MANAGER_ID) };
-          job.dest = newDest;
-          Object.assign(dest, newDest);
-          await env.CLIENTS.put(key, JSON.stringify(job));
-          try {
-            if (job.type === 'order') await sendOrderItem(env, items[idx], idx, dest, isWhite);
-            else await sendSearchItem(env, items[idx], idx, dest);
-          } catch (_) {}
-        } catch (_) {}
       }
     }
 
@@ -807,8 +779,8 @@ function clientName(from) {
   if (from.first_name) parts.push(from.first_name);
   if (from.last_name) parts.push(from.last_name);
   const name = parts.length ? parts.join(' ').trim() : 'Клиент';
-  const suffix = from.username ? ` @${from.username}` : ` ID: ${from.id}`;
-  return `${name} |${suffix}`.slice(0, 128);
+  const suffix = from.username ? ` @${from.username}` : '';
+  return (name + (suffix ? ` |${suffix}` : '')).slice(0, 128);
 }
 
 async function getOrCreateTopic(env, clientChatId, from) {
@@ -1432,7 +1404,7 @@ async function handleCalc(env, chatId, data, user) {
     const dest = topicId && groupId
       ? { chat_id: groupId, message_thread_id: topicId }
       : { chat_id: Number(env.MANAGER_ID) };
-    const tag = user?.username ? `@${user.username}` : `ID: ${chatId}`;
+    const tag = user?.username ? `@${user.username}` : (user?.first_name || user?.last_name ? `${(user.first_name || '').trim()} ${(user.last_name || '').trim()}`.trim() : 'Клиент');
     const msgToManager = text + `\n\n  👤  Клиент: ${tag}\n  ⬇️  Ответьте на это сообщение — стоимость придёт клиенту.`;
 
     await callTelegram(env, 'sendMessage', {
@@ -1474,7 +1446,7 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
     return sum + (Number.isNaN(v) ? 0 : v);
   }, 0);
 
-  const username = user?.username ? `@${user.username}` : `ID: ${user?.id}`;
+  const username = user?.username ? `@${user.username}` : (user?.first_name || user?.last_name ? `${(user.first_name || '').trim()} ${(user.last_name || '').trim()}`.trim() : 'Клиент');
   const orderNumber = await getAndIncrementOrderCounter(env);
   const deliveryInfo = data.deliveryType || '';
   const summaryText =
@@ -1587,7 +1559,7 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     ? { chat_id: groupId, message_thread_id: topicId }
     : { chat_id: Number(env.MANAGER_ID) };
 
-  const username = user?.username ? `@${user.username}` : `ID: ${user?.id}`;
+  const username = user?.username ? `@${user.username}` : (user?.first_name || user?.last_name ? `${(user.first_name || '').trim()} ${(user.last_name || '').trim()}`.trim() : 'Клиент');
   const header =
     '  🔍  <b>НОВАЯ ЗАЯВКА НА ПОИСК</b>\n' +
     `  👤  Клиент: ${username}\n` +
