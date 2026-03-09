@@ -1354,25 +1354,14 @@ async function handleUpdate(update, env, workerUrl) {
 
   // Обычное сообщение от клиента → переслать в тему + реакция OK
   let topicId = await getOrCreateTopic(env, chatId, msg.from);
-  let needForwardToManager = !topicId || isGeneralTopic(env, topicId);
   if (topicId && !isGeneralTopic(env, topicId)) {
     let sent = await forwardClientMessageToTopic(env, msg, topicId);
     if (sent && !sent.ok && isThreadNotFound(sent)) {
       topicId = await invalidateAndRecreateTopic(env, chatId, msg.from);
       if (topicId && !isGeneralTopic(env, topicId)) {
-        sent = await forwardClientMessageToTopic(env, msg, topicId);
-      } else {
-        needForwardToManager = true;
+        await forwardClientMessageToTopic(env, msg, topicId);
       }
     }
-    if (sent && !sent.ok) needForwardToManager = true;
-  }
-  if (needForwardToManager) {
-    await callTelegram(env, 'forwardMessage', {
-      chat_id: Number(env.MANAGER_ID),
-      from_chat_id: chatId,
-      message_id: msg.message_id
-    });
   }
 
   await callTelegram(env, 'setMessageReaction', {
@@ -1424,21 +1413,27 @@ async function forwardClientMessageToTopic(env, msg, topicId) {
   return res;
 }
 
+const MANAGER_MSG_PREFIX = 'Сообщение от менеджера:\n\n';
+
 async function forwardManagerReplyToClient(env, msg, clientId) {
   const text = msg.text || msg.caption || '';
   if (msg.text) {
     await callTelegram(env, 'sendMessage', {
       chat_id: clientId,
-      text: `📩 ${text}`
+      text: MANAGER_MSG_PREFIX + text
     });
   } else if (msg.photo && msg.photo.length) {
     const photo = msg.photo[msg.photo.length - 1];
     await callTelegram(env, 'sendPhoto', {
       chat_id: clientId,
       photo: photo.file_id,
-      caption: text ? `📩 ${text}` : undefined
+      caption: text ? MANAGER_MSG_PREFIX + text : 'Сообщение от менеджера:'
     });
   } else if (msg.document || msg.voice || msg.audio || msg.video) {
+    await callTelegram(env, 'sendMessage', {
+      chat_id: clientId,
+      text: 'Сообщение от менеджера:'
+    });
     await callTelegram(env, 'copyMessage', {
       chat_id: clientId,
       from_chat_id: msg.chat.id,
@@ -1447,7 +1442,7 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
   } else if (text) {
     await callTelegram(env, 'sendMessage', {
       chat_id: clientId,
-      text: `📩 ${text}`
+      text: MANAGER_MSG_PREFIX + text
     });
   }
 }
