@@ -134,11 +134,6 @@ export default {
           await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
             type: 'order', orderId, orderData, items, dest, isWhite, workerUrl: url.origin
           }));
-          await callTelegram(env, 'sendMessage', {
-            chat_id: chatId,
-            text: '✅ Ваш заказ получен и передан менеджеру.',
-            parse_mode: 'HTML'
-          });
           return jsonResponse({ ok: true, orderId, orderNumber, queued: true });
         }
 
@@ -176,12 +171,6 @@ export default {
           type: 'order', items, dest, isWhite, clientId: chatId,
           orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
         }));
-
-        await callTelegram(env, 'sendMessage', {
-          chat_id: chatId,
-          text: '✅ Ваш заказ получен и передан менеджеру.',
-          parse_mode: 'HTML'
-        });
 
         return jsonResponse({ ok: true, orderId, orderNumber, totalItems: items.length, processed: 0 });
       } catch (e) {
@@ -651,8 +640,7 @@ async function finishOrder(env, job) {
 
   await sendWithRetry(env, 'sendMessage', {
     chat_id: clientId,
-    text: `  ✅  <b>Ваш заказ №${orderNumber} успешно принят!</b>\n\n` +
-      'Менеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно @Krivetka1301.',
+    text: `✅ Ваш заказ №${orderNumber} успешно принят! Менеджер получил информацию и скоро свяжется с вами или вы можете написать ему самостоятельно прямо в этот чат.`,
     parse_mode: 'HTML'
   });
 
@@ -799,12 +787,9 @@ function getGeneralTopicId(env) {
 
 function clientName(from) {
   if (!from) return 'Клиент';
-  const parts = [];
-  if (from.first_name) parts.push(from.first_name);
-  if (from.last_name) parts.push(from.last_name);
-  const name = parts.length ? parts.join(' ').trim() : 'Клиент';
-  const suffix = from.username ? ` @${from.username}` : '';
-  return (name + (suffix ? ` |${suffix}` : '')).slice(0, 128);
+  const name = (from.first_name || from.last_name || 'Клиент').trim();
+  const username = from.username ? `@${from.username}` : '';
+  return username ? `${name} | ${username}` : name;
 }
 
 async function getOrCreateTopic(env, clientChatId, from) {
@@ -1438,7 +1423,7 @@ async function handleCalc(env, chatId, data, user) {
     });
     await callTelegram(env, 'sendMessage', {
       chat_id: chatId,
-      text: '  📤  Запрос на расчёт отправлен менеджеру. Ответьте в чате бота — менеджер пришлёт стоимость.',
+      text: '✅ Запрос на расчёт отправлен менеджеру. Прямо в этом чате вы можете общаться с ним.',
       parse_mode: 'HTML'
     });
   } else {
