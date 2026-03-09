@@ -515,8 +515,8 @@
         const RATE_MULTIPLIER = 13; 
         const ORDER_HELP_URL = 'https://telegra.ph/Kak-pravilno-oformlyat-zakazy-03-03'; 
         const WORKER_URL = 'https://nwsnumbot.krivetkagames.workers.dev';
-        const ORDER_STATUS_URL = `${WORKER_URL}/order-status`;
-        const ORDERS_URL = `${WORKER_URL}/orders`;
+        const ORDER_STATUS_URL = `${WORKER_URL}/api/order-status`;
+        const ORDERS_URL = `${WORKER_URL}/api/orders`;
         
         let currentTab = 'calc';
         let orderItems = [];
@@ -1111,9 +1111,9 @@
 
         async function fetchOrdersForClient() {
             const userId = getHistoryUserId();
-            if (!userId) return [];
+            if (userId === undefined || userId === null) return [];
             try {
-                const res = await fetch(`${ORDERS_URL}?clientId=${encodeURIComponent(userId)}`);
+                const res = await fetch(`${ORDERS_URL}?clientId=${encodeURIComponent(String(userId))}`);
                 const data = await res.json();
                 return data.ok && Array.isArray(data.orders) ? data.orders : [];
             } catch (e) { return []; }
@@ -1146,7 +1146,7 @@
             }
             if (item.timestamp) {
                 const ts = Number(item.timestamp);
-                const o = allOrders.find(x => x.timestamp && Math.abs(Number(x.timestamp) - ts) < 60000);
+                const o = allOrders.find(x => x.timestamp && Math.abs(Number(x.timestamp) - ts) < 120000);
                 if (o) return o;
             }
             if (item.orderId) {
@@ -1155,9 +1155,9 @@
                     const ts = Number(parts[parts.length - 1]);
                     if (ts > 0) {
                         const o = allOrders.find(x => {
-                            const xParts = String(x.orderId).split('_');
+                            const xParts = String(x.orderId || '').split('_');
                             const xTs = xParts.length >= 2 ? Number(xParts[xParts.length - 1]) : 0;
-                            return xTs > 0 && Math.abs(xTs - ts) < 60000;
+                            return xTs > 0 && Math.abs(xTs - ts) < 120000;
                         });
                         if (o) return o;
                     }

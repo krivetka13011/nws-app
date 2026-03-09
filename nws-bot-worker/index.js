@@ -308,7 +308,7 @@ export default {
     }
 
     // API списка заказов клиента для WebApp (история)
-    if (request.method === 'GET' && url.pathname === '/orders') {
+    if (request.method === 'GET' && (url.pathname === '/orders' || url.pathname === '/api/orders')) {
       const clientId = url.searchParams.get('clientId');
       if (!clientId || !env.CLIENTS) {
         return jsonResponse({ ok: false }, 400);
@@ -340,7 +340,7 @@ export default {
     }
 
     // API статуса заказа для WebApp (история)
-    if (request.method === 'GET' && url.pathname === '/order-status') {
+    if (request.method === 'GET' && (url.pathname === '/order-status' || url.pathname === '/api/order-status')) {
       const orderId = url.searchParams.get('orderId');
       const orderNumber = url.searchParams.get('orderNumber');
       if ((!orderId && !orderNumber) || !env.CLIENTS) {
