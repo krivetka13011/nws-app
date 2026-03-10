@@ -1,0 +1,29 @@
+name: Notify Push
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Send push notification
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NOTIFY_CHAT_ID: ${{ secrets.NOTIFY_CHAT_ID }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "BOT_TOKEN secret not set"
+            exit 0
+          fi
+          CHAT_ID="${NOTIFY_CHAT_ID:-1159166497}"
+          MSG=$(git log -1 --pretty=%B | head -1 | sed 's/"/\\"/g')
+          SHA=$(git rev-parse --short HEAD)
+          json="{\"chat_id\":\"$CHAT_ID\",\"text\":\"✅ Пуш завершён\n\n$MSG\n$SHA\"}"
+          curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$json" || true
