@@ -858,8 +858,11 @@ function getGeneralTopicId(env) {
 }
 
 function clientName(from) {
-  if (!from) return 'Клиент | —';
-  const name = (from.first_name || from.last_name || '').trim() || 'Клиент';
+  if (!from || typeof from !== 'object') return 'Клиент | —';
+  const fn = String(from.first_name || '').trim();
+  const ln = String(from.last_name || '').trim();
+  const fullName = `${fn} ${ln}`.trim() || 'Клиент';
+  const name = fullName.replace(/\s+/g, ' ').slice(0, 50);
   const username = from.username ? `@${from.username}` : '—';
   return `${name} | ${username}`;
 }
@@ -926,7 +929,7 @@ async function invalidateAndRecreateTopic(env, clientChatId, from) {
     } catch (_) {}
     await env.CLIENTS.delete(key);
   }
-  const name = clientName(from);
+  const name = clientName(from || {});
   const res = await callTelegram(env, 'createForumTopic', { chat_id: Number(groupId), name });
   if (!res.ok || !res.result) return null;
   const topicId = res.result.message_thread_id;
@@ -1482,7 +1485,24 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  await getOrCreateTopic(env, chatId, from);
+  let { topicId } = await getOrCreateTopic(env, chatId, from);
+  if (topicId && !isGeneralTopic(env, topicId)) {
+    const ping = await callTelegram(env, 'sendMessage', {
+      chat_id: getGroupId(env),
+      message_thread_id: topicId,
+      text: '—'
+    });
+    const badTopic = (ping && !ping.ok && isThreadNotFound(ping)) || (ping?.ok && sentToGeneral(ping, topicId));
+    if (badTopic) {
+      if (ping?.ok && ping.result?.message_id) {
+        await callTelegram(env, 'deleteMessage', {
+          chat_id: getGroupId(env),
+          message_id: ping.result.message_id
+        });
+      }
+      topicId = await invalidateAndRecreateTopic(env, chatId, from);
+    }
+  }
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
