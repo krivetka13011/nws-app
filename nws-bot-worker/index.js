@@ -985,6 +985,25 @@ async function addToBroadcastList(env, chatId) {
   }
 }
 
+function parseBroadcastButtons(text) {
+  if (!text || typeof text !== 'string') return { text: text || '', buttons: [] };
+  const re = /\[([^\]]+?)\s*\+\s*(https?:\/\/[^\s\]\]]+)\]/g;
+  const buttons = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    buttons.push({ text: m[1].trim(), url: m[2].trim() });
+  }
+  const cleaned = text.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { text: cleaned, buttons };
+}
+
+function buildBroadcastKeyboard(buttons) {
+  if (!buttons || !buttons.length) return undefined;
+  return {
+    inline_keyboard: buttons.map(b => [{ text: b.text, url: b.url }])
+  };
+}
+
 async function broadcastToAllUsers(env, msg) {
   if (!env.CLIENTS) return;
   let list = [];
@@ -994,14 +1013,34 @@ async function broadcastToAllUsers(env, msg) {
   } catch (_) {}
   if (!Array.isArray(list) || list.length === 0) return;
 
+  const rawText = msg.text || msg.caption || '';
+  const { text: cleanedText, buttons } = parseBroadcastButtons(rawText);
+  const keyboard = buildBroadcastKeyboard(buttons);
+  const hasButtons = keyboard && keyboard.inline_keyboard.length > 0;
+
   let toRemove = [];
 
   for (const chatId of list) {
-    const res = await callTelegram(env, 'copyMessage', {
-      chat_id: chatId,
-      from_chat_id: msg.chat.id,
-      message_id: msg.message_id
-    });
+    let res;
+    if (hasButtons) {
+      const opts = { chat_id: chatId, parse_mode: 'HTML', reply_markup: keyboard };
+      if (msg.photo && msg.photo.length) {
+        const photo = msg.photo[msg.photo.length - 1];
+        res = await callTelegram(env, 'sendPhoto', { ...opts, photo: photo.file_id, caption: cleanedText });
+      } else if (msg.video) {
+        res = await callTelegram(env, 'sendVideo', { ...opts, video: msg.video.file_id, caption: cleanedText });
+      } else if (msg.document) {
+        res = await callTelegram(env, 'sendDocument', { ...opts, document: msg.document.file_id, caption: cleanedText });
+      } else {
+        res = await callTelegram(env, 'sendMessage', { ...opts, text: cleanedText });
+      }
+    } else {
+      res = await callTelegram(env, 'copyMessage', {
+        chat_id: chatId,
+        from_chat_id: msg.chat.id,
+        message_id: msg.message_id
+      });
+    }
     if (res && !res.ok) {
       const d = (res.description || '').toLowerCase();
       if (d.includes('blocked') || d.includes('deactivated') || d.includes('chat not found')) {
