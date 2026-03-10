@@ -1,0 +1,14 @@
+---
+description: Всегда пушить изменения после обновления кода
+alwaysApply: true
+---
+
+# Git Push после обновлений
+
+После каждого изменения кода в этом проекте **обязательно** выполнять push:
+
+1. `git add` изменённых файлов
+2. `git commit` с осмысленным сообщением и `--trailer "Made-with: Cursor"`
+3. `git push` в origin/main
+
+Пример: после правок в index.html или nws-bot-worker/index.js — сразу коммитить и пушить.
