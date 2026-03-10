@@ -704,7 +704,7 @@
                 deliveryStatusText = formatted.delivery;
             }
 
-            document.getElementById('detailTitle').innerText = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : item.title;
+            document.getElementById('detailTitle').innerText = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : item.title;
             document.getElementById('detailDate').innerText = item.date;
             document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
             document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0].trim() : '0 ₽';
@@ -1119,21 +1119,48 @@
             try {
                 if (searchItems.length === 0) return alert("Пустой поиск!");
 
-                const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
-                const historyObj = {
-                    title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
-                    delivery: 'Поиск', price: '', itemsData: searchItems, images: historyImages
-                };
-                
-                await addToHistoryV2(historyObj);
-
-                let payload = { type: 'search', items: searchItems };
-                let json = JSON.stringify(payload);
-                if (json.length > 3500) {
-                    payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
+                const userId = getHistoryUserId() || 0;
+                const itemsForApi = searchItems.map(i => ({
+                    link: i.link, comment: i.comment, imgUrls: (i.imgUrls || []).slice(0, 9),
+                    imgDeleteUrls: (i.imgDeleteUrls || []).slice(0, (i.imgUrls || []).length)
+                }));
+                let apiOk = false;
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/create-search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId,
+                            username: tg.initDataUnsafe?.user?.username || '',
+                            firstName: tg.initDataUnsafe?.user?.first_name || '',
+                            lastName: tg.initDataUnsafe?.user?.last_name || '',
+                            items: itemsForApi
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.ok && data.orderNumber) {
+                        apiOk = true;
+                        const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                        await addToHistoryV2({
+                            title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
+                            delivery: 'Поиск', price: '', itemsData: searchItems.map(i => ({ ...i, imgDeleteUrls: i.imgDeleteUrls || [] })),
+                            images: historyImages, orderId: data.orderId, orderNumber: data.orderNumber
+                        });
+                        tg.close();
+                        return;
+                    }
+                } catch (_) {}
+                if (!apiOk) {
+                    const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                    await addToHistoryV2({
+                        title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
+                        delivery: 'Поиск', price: '', itemsData: searchItems, images: historyImages
+                    });
+                    let payload = { type: 'search', items: searchItems };
+                    let json = JSON.stringify(payload);
+                    if (json.length > 3500) payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
+                    tg.sendData(JSON.stringify(payload));
                 }
-
-                tg.sendData(JSON.stringify(payload));
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -1164,7 +1191,7 @@
             }
             deleteSheetSelections = history.map((item, index) => ({ index, item }));
             container.innerHTML = history.map((item, i) => {
-                const title = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title || 'Заказ');
+                const title = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : (item.title || 'Заказ');
                 return `<label class="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-color)] hover:bg-white/5 cursor-pointer">
                     <input type="checkbox" class="delete-order-cb" data-index="${i}">
                     <span class="text-white">${title}</span>
@@ -1185,12 +1212,18 @@
             const history = await loadFullHistory();
             const toRemove = new Set(checked);
             const deleteUrls = [];
+            const toMarkDeleted = [];
             for (const idx of checked) {
                 const item = history[idx];
-                if (!item || !item.itemsData) continue;
-                for (const prod of item.itemsData) {
-                    const urls = prod.imgDeleteUrls || [];
-                    for (const u of urls) if (u && typeof u === 'string') deleteUrls.push(u);
+                if (!item) continue;
+                if (item.itemsData) {
+                    for (const prod of item.itemsData) {
+                        const urls = prod.imgDeleteUrls || [];
+                        for (const u of urls) if (u && typeof u === 'string') deleteUrls.push(u);
+                    }
+                }
+                if (item.orderId || item.orderNumber) {
+                    toMarkDeleted.push({ orderId: item.orderId, orderNumber: item.orderNumber });
                 }
             }
             try {
@@ -1200,6 +1233,15 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deleteUrls })
                     });
+                }
+                for (const { orderId, orderNumber } of toMarkDeleted) {
+                    try {
+                        await fetch(`${WORKER_URL}/api/mark-order-deleted`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orderId, orderNumber })
+                        });
+                    } catch (_) {}
                 }
                 const newHistory = history.filter((_, i) => !toRemove.has(i));
                 await saveHistoryToBackend(newHistory, getHistoryUserId());
@@ -1332,7 +1374,7 @@
                        </div>`
                     : '';
 
-                const titleDisplay = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : item.title;
+                const titleDisplay = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : item.title;
                 const html = `
                     <div class="history-item" onclick="openHistoryDetails(${i})">
                         <div class="history-header"><span class="history-type">${titleDisplay}</span><span class="history-date">${item.date}</span></div>

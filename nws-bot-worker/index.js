@@ -155,6 +155,7 @@ export default {
 
         if (sent?.result?.message_id) {
           orderData.pinnedMsgId = sent.result.message_id;
+          orderData.dest = { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id };
           if (dest.message_thread_id) {
             await callTelegram(env, 'pinChatMessage', {
               chat_id: groupId, message_id: sent.result.message_id, disable_notification: true
@@ -173,6 +174,91 @@ export default {
         }));
 
         return jsonResponse({ ok: true, orderId, orderNumber, totalItems: items.length, processed: 0 });
+      } catch (e) {
+        return jsonResponse({ ok: false, error: String(e) }, 500);
+      }
+    }
+
+    // POST /api/create-search — заявка на поиск с единой нумерацией
+    if (request.method === 'POST' && url.pathname === '/api/create-search') {
+      if (!env.CLIENTS) return jsonResponse({ ok: false, error: 'Not configured' }, 500);
+      let body;
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
+      }
+      const { userId, username, firstName = '', lastName = '', items } = body;
+      if (!userId || !items || !Array.isArray(items) || items.length === 0) {
+        return jsonResponse({ ok: false, error: 'userId and items required' }, 400);
+      }
+      try {
+        const chatId = Number(userId);
+        const user = { id: chatId, username, first_name: firstName, last_name: lastName };
+        const orderNumber = await getAndIncrementOrderCounter(env);
+        const orderId = `search_${chatId}_${Date.now()}`;
+        const { topicId } = await getOrCreateTopic(env, chatId, user);
+        const groupId = getGroupId(env);
+        let dest = topicId
+          ? { chat_id: groupId, message_thread_id: topicId }
+          : { chat_id: Number(env.MANAGER_ID) };
+        const usernameStr = username ? `@${username}` : (firstName || lastName ? `${(firstName || '').trim()} ${(lastName || '').trim()}`.trim() : 'Клиент');
+        const header =
+          `  🔍  <b>ЗАЯВКА НА ПОИСК №${orderNumber}</b>\n` +
+          `  👤  Клиент: ${usernameStr}\n` +
+          `  📦  Позиций: ${items.length}`;
+
+        const lockAcquired = await acquireOrderLock(env, chatId, orderId);
+        if (!lockAcquired) {
+          await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
+          await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+            type: 'search', orderId, orderNumber, items, dest, clientId: chatId, header, workerUrl: url.origin
+          }));
+          return jsonResponse({ ok: true, orderId, orderNumber, queued: true });
+        }
+
+        let headerSent = await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+        if (isThreadNotFound(headerSent)) {
+          const newTopicId = await invalidateAndRecreateTopic(env, chatId, user);
+          dest = newTopicId
+            ? { chat_id: groupId, message_thread_id: newTopicId }
+            : { chat_id: Number(env.MANAGER_ID) };
+          headerSent = await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+        }
+        if (headerSent?.result?.message_id) {
+          await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+            headerMsgId: headerSent.result.message_id,
+            dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
+          }));
+        }
+        await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
+
+        await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
+          type: 'search', items, dest, clientId: chatId, orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
+        }));
+
+        ctx.waitUntil((async () => {
+          for (let idx = 0; idx < items.length; idx++) {
+            if (idx > 0) await sleep(80);
+            for (let a = 0; a < 3; a++) {
+              try {
+                await sendSearchItem(env, items[idx], idx, dest);
+                break;
+              } catch (e) {
+                if (a < 2) await sleep(2000);
+              }
+            }
+          }
+          await env.CLIENTS.delete(`pending_items_${orderId}`);
+          await sendWithRetry(env, 'sendMessage', {
+            chat_id: chatId,
+            text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+            parse_mode: 'HTML'
+          });
+          await releaseOrderLock(env, chatId, url.origin);
+        })());
+
+        return jsonResponse({ ok: true, orderId, orderNumber });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
       }
@@ -485,6 +571,69 @@ export default {
         } catch (_) { /* ignore per-image errors */ }
       }
       return jsonResponse({ ok: true });
+    }
+
+    // POST /api/mark-order-deleted — пометить заказ/заявку как удалённую у менеджера
+    if (request.method === 'POST' && url.pathname === '/api/mark-order-deleted') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
+      }
+      const { orderId, orderNumber } = body;
+      if (!orderId && !orderNumber) {
+        return jsonResponse({ ok: false, error: 'orderId or orderNumber required' }, 400);
+      }
+      const DELETED_TEXT = '🗑 <i>Сообщение удалено клиентом</i>';
+      try {
+        let oid = orderId;
+        if (!oid && orderNumber) {
+          oid = await env.CLIENTS.get(`order_by_num_${orderNumber}`);
+          if (!oid) return jsonResponse({ ok: true });
+        }
+        const isSearch = String(oid || '').startsWith('search_');
+        if (isSearch) {
+          const metaRaw = await env.CLIENTS.get(`search_meta_${oid}`);
+          if (metaRaw) {
+            const meta = JSON.parse(metaRaw);
+            if (meta.headerMsgId && meta.dest) {
+              const editOpts = {
+                chat_id: meta.dest.chat_id,
+                message_id: meta.headerMsgId,
+                text: DELETED_TEXT,
+                parse_mode: 'HTML'
+              };
+              if (meta.dest.message_thread_id) editOpts.message_thread_id = meta.dest.message_thread_id;
+              await callTelegram(env, 'editMessageText', editOpts);
+            }
+            await env.CLIENTS.delete(`search_meta_${oid}`);
+          }
+        } else {
+          const orderRaw = await env.CLIENTS.get(`order_${oid}`);
+          if (orderRaw) {
+            const od = JSON.parse(orderRaw);
+            if (od.pinnedMsgId && od.dest) {
+              const editOpts = {
+                chat_id: od.dest.chat_id,
+                message_id: od.pinnedMsgId,
+                text: DELETED_TEXT,
+                parse_mode: 'HTML'
+              };
+              if (od.dest.message_thread_id) editOpts.message_thread_id = od.dest.message_thread_id;
+              await callTelegram(env, 'editMessageText', editOpts);
+            }
+          }
+        }
+        if (orderNumber) await env.CLIENTS.delete(`order_by_num_${orderNumber}`);
+        if (oid) {
+          await env.CLIENTS.delete(`order_${oid}`);
+        }
+        return jsonResponse({ ok: true });
+      } catch (e) {
+        console.error('mark-order-deleted:', e);
+        return jsonResponse({ ok: false, error: String(e) }, 500);
+      }
     }
 
     // Переустановить webhook (включая callback_query)
@@ -823,6 +972,7 @@ async function releaseOrderLock(env, clientId, workerUrl) {
 
     if (sent?.result?.message_id) {
       orderData.pinnedMsgId = sent.result.message_id;
+      orderData.dest = { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id };
       const groupId = getGroupId(env);
       if (groupId && dest.message_thread_id) {
         await callTelegram(env, 'pinChatMessage', {
@@ -852,7 +1002,14 @@ async function releaseOrderLock(env, clientId, workerUrl) {
   } else if (job.type === 'search') {
     const { orderId, items, dest, header } = job;
 
-    await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+    const headerSent = await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+    if (headerSent?.result?.message_id) {
+      await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+        headerMsgId: headerSent.result.message_id,
+        dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
+      }));
+    }
+    if (job.orderNumber) await env.CLIENTS.put(`order_by_num_${job.orderNumber}`, orderId);
 
     for (let idx = 0; idx < items.length; idx++) {
       if (idx > 0) await sleep(80);
@@ -1779,6 +1936,7 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     return;
   }
 
+  const orderNumber = await getAndIncrementOrderCounter(env);
   const { topicId } = await getOrCreateTopic(env, chatId, user);
   const groupId = getGroupId(env);
   let dest = topicId
@@ -1787,16 +1945,17 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
 
   const username = user?.username ? `@${user.username}` : (user?.first_name || user?.last_name ? `${(user.first_name || '').trim()} ${(user.last_name || '').trim()}`.trim() : 'Клиент');
   const header =
-    '  🔍  <b>НОВАЯ ЗАЯВКА НА ПОИСК</b>\n' +
+    `  🔍  <b>ЗАЯВКА НА ПОИСК №${orderNumber}</b>\n` +
     `  👤  Клиент: ${username}\n` +
     `  📦  Позиций: ${items.length}`;
 
   const orderId = `search_${chatId}_${Date.now()}`;
+  await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
 
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
   if (!lockAcquired) {
     await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
-      type: 'search', orderId, items, dest, clientId: chatId, header, workerUrl
+      type: 'search', orderId, orderNumber, items, dest, clientId: chatId, header, workerUrl
     }));
     return;
   }
@@ -1807,7 +1966,13 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     dest = newTopicId
       ? { chat_id: groupId, message_thread_id: newTopicId }
       : { chat_id: Number(env.MANAGER_ID) };
-    await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+    headerSent = await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
+  }
+  if (headerSent?.result?.message_id) {
+    await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+      headerMsgId: headerSent.result.message_id,
+      dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
+    }));
   }
 
   for (let idx = 0; idx < items.length; idx++) {
