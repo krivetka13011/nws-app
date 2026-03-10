@@ -1341,7 +1341,12 @@
         }
 
         function sortHistoryNewestFirst(history) {
-            return [...history].sort((a, b) => getHistoryItemTimestamp(b) - getHistoryItemTimestamp(a));
+            return [...history].sort((a, b) => {
+                const ta = getHistoryItemTimestamp(a), tb = getHistoryItemTimestamp(b);
+                if (tb !== ta) return tb - ta;
+                const na = Number(a.orderNumber) || 0, nb = Number(b.orderNumber) || 0;
+                return nb - na;
+            });
         }
 
         async function renderHistory() {

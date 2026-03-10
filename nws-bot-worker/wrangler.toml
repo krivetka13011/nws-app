@@ -2,6 +2,14 @@ name = "nwsnumbot"
 main = "index.js"
 compatibility_date = "2026-03-08"
 
+[[durable_objects.bindings]]
+name = "ORDER_COUNTER"
+class_name = "OrderCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["OrderCounter"]
+
 [triggers]
 crons = ["* * * * *"]
 

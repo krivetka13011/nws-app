@@ -1325,21 +1325,52 @@ async function broadcastToAllUsers(env, msg) {
   }
 }
 
-// ===== Order numbering =====
+// ===== Order numbering (atomic via Durable Object) =====
 
 async function getAndIncrementOrderCounter(env) {
+  if (env.ORDER_COUNTER) {
+    try {
+      const id = env.ORDER_COUNTER.idFromName('global');
+      const stub = env.ORDER_COUNTER.get(id);
+      const res = await stub.fetch('https://internal/increment');
+      const data = await res.json();
+      if (data?.ok && typeof data.value === 'number') return data.value;
+    } catch (e) {
+      console.error('OrderCounter DO error:', e);
+    }
+  }
   if (!env.CLIENTS) return 1;
   const key = 'order_counter';
-  for (let attempt = 0; attempt < 15; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     const v = await env.CLIENTS.get(key);
     const n = v ? (parseInt(v, 10) || 1) : 1;
     const next = n + 1;
     await env.CLIENTS.put(key, String(next));
-    await sleep(30);
+    await sleep(80);
     const check = await env.CLIENTS.get(key);
     if (parseInt(check, 10) <= next) return n;
   }
   return Math.max(1, (Date.now() % 100000) + 1);
+}
+
+export class OrderCounter {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/increment') {
+      const v = await this.ctx.storage.get('value');
+      const n = (v !== undefined ? parseInt(v, 10) : 0) || 0;
+      const next = n + 1;
+      await this.ctx.storage.put('value', next);
+      return new Response(JSON.stringify({ ok: true, value: next }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    return new Response('Not found', { status: 404 });
+  }
 }
 
 // ===== Payment helpers =====
