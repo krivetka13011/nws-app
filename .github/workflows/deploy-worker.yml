@@ -24,13 +24,14 @@ jobs:
         continue-on-error: true
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NOTIFY_CHAT_ID: ${{ secrets.NOTIFY_CHAT_ID }}
         run: |
           if [ -z "$BOT_TOKEN" ]; then
-            echo "BOT_TOKEN secret not set"
+            echo "BOT_TOKEN secret not set — добавьте в Settings → Secrets"
             exit 0
           fi
-          # JSON — надёжная кодировка для кириллицы и эмодзи
-          json='{"chat_id":1159166497,"text":"✅ Деплой NWS Worker прошёл успешно!"}'
+          CHAT_ID="${NOTIFY_CHAT_ID:-1159166497}"
+          json="{\"chat_id\":\"$CHAT_ID\",\"text\":\"✅ Деплой NWS Worker прошёл успешно!\",\"parse_mode\":\"HTML\"}"
           resp=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
             -H "Content-Type: application/json" \
             -d "$json")
@@ -38,5 +39,5 @@ jobs:
           body=$(echo "$resp" | sed '$d')
           echo "Telegram API response (code=$http_code): $body"
           if [ "$http_code" != "200" ]; then
-            echo "::warning::Notification failed. Check BOT_TOKEN and chat_id."
+            echo "::error::Уведомление не отправлено. Проверьте BOT_TOKEN и NOTIFY_CHAT_ID (или chat_id 1159166497). Ответ: $body"
           fi
