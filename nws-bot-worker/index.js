@@ -1485,7 +1485,29 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 // ===== Handlers =====
 
 async function handleStart(env, chatId, from) {
-  await getOrCreateTopic(env, chatId, from);
+  let { topicId } = await getOrCreateTopic(env, chatId, from);
+  if (topicId && !isGeneralTopic(env, topicId)) {
+    const ping = await callTelegram(env, 'sendMessage', {
+      chat_id: getGroupId(env),
+      message_thread_id: topicId,
+      text: '\u200B'
+    });
+    const badTopic = (ping && !ping.ok && isThreadNotFound(ping)) || (ping?.ok && sentToGeneral(ping, topicId));
+    if (badTopic) {
+      if (ping?.ok && ping.result?.message_id) {
+        await callTelegram(env, 'deleteMessage', {
+          chat_id: getGroupId(env),
+          message_id: ping.result.message_id
+        });
+      }
+      await invalidateAndRecreateTopic(env, chatId, from);
+    } else if (ping?.ok && ping.result?.message_id) {
+      await callTelegram(env, 'deleteMessage', {
+        chat_id: getGroupId(env),
+        message_id: ping.result.message_id
+      });
+    }
+  }
 
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
