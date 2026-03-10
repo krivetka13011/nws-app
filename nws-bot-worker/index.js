@@ -659,6 +659,49 @@ export default {
       }
     }
 
+    // POST /api/admin/reset-all?secret=WEBHOOK_SECRET — полная очистка: история, заказы, номера
+    if (request.method === 'POST' && url.pathname === '/api/admin/reset-all') {
+      const secret = url.searchParams.get('secret');
+      if (secret !== env.WEBHOOK_SECRET) {
+        return jsonResponse({ ok: false, error: 'Forbidden' }, 403);
+      }
+      try {
+        let deleted = 0;
+        if (env.ORDERS_KV) {
+          let cursor;
+          do {
+            const list = await env.ORDERS_KV.list({ limit: 1000, cursor });
+            for (const k of list.keys) {
+              await env.ORDERS_KV.delete(k.name);
+              deleted++;
+            }
+            cursor = list.list_complete ? undefined : list.cursor;
+          } while (cursor);
+        }
+        if (env.CLIENTS) {
+          let cursor;
+          do {
+            const list = await env.CLIENTS.list({ limit: 1000, cursor });
+            for (const k of list.keys) {
+              await env.CLIENTS.delete(k.name);
+              deleted++;
+            }
+            cursor = list.list_complete ? undefined : list.cursor;
+          } while (cursor);
+        }
+        if (env.ORDER_COUNTER) {
+          try {
+            const id = env.ORDER_COUNTER.idFromName('global');
+            await env.ORDER_COUNTER.get(id).fetch('https://internal/reset');
+          } catch (_) {}
+        }
+        return jsonResponse({ ok: true, deleted });
+      } catch (e) {
+        console.error('reset-all:', e);
+        return jsonResponse({ ok: false, error: String(e) }, 500);
+      }
+    }
+
     // Переустановить webhook (включая callback_query)
     if (request.method === 'GET' && url.pathname === '/set-webhook') {
       const webhookUrl = `${url.origin}/webhook/${env.WEBHOOK_SECRET}`;
@@ -1366,6 +1409,12 @@ export class OrderCounter {
       const next = n + 1;
       await this.ctx.storage.put('value', next);
       return new Response(JSON.stringify({ ok: true, value: next }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (url.pathname === '/reset') {
+      await this.ctx.storage.put('value', 0);
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
