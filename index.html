@@ -1306,14 +1306,31 @@
             return { order, delivery };
         }
 
+        let renderHistoryVersion = 0;
+
+        function getHistoryItemTimestamp(item) {
+            if (item.timestamp) return Number(item.timestamp);
+            const oid = item.orderId || '';
+            const m = oid.match(/_(\d{10,})$/);
+            if (m) return Number(m[1]);
+            return 0;
+        }
+
+        function sortHistoryNewestFirst(history) {
+            return [...history].sort((a, b) => getHistoryItemTimestamp(b) - getHistoryItemTimestamp(a));
+        }
+
         async function renderHistory() {
+            const myVersion = ++renderHistoryVersion;
             const container = document.getElementById('historyList');
             container.innerHTML = '<div style="text-align:center; margin-top:20px; color:#666;">Загрузка...</div>';
             
-            const [history, allOrders] = await Promise.all([
+            const [historyRaw, allOrders] = await Promise.all([
                 loadFullHistory(),
                 fetchOrdersForClient()
             ]);
+            if (myVersion !== renderHistoryVersion) return;
+            const history = sortHistoryNewestFirst(historyRaw);
             historyDataCache = history;
             lastOrdersCache = allOrders;
             container.innerHTML = '';
@@ -1375,7 +1392,7 @@
                 `;
                 container.insertAdjacentHTML('beforeend', html);
             }
-            if (historyUpdated) {
+            if (historyUpdated && myVersion === renderHistoryVersion) {
                 await saveHistoryToBackend(history, getHistoryUserId());
             }
         }
