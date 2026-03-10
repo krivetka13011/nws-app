@@ -22,7 +22,21 @@ jobs:
       - name: Notify deploy success
         if: success()
         continue-on-error: true
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=1159166497" \
-            -d "text=✅ Деплой NWS Worker прошёл успешно!"
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "BOT_TOKEN secret not set"
+            exit 0
+          fi
+          # JSON — надёжная кодировка для кириллицы и эмодзи
+          json='{"chat_id":1159166497,"text":"✅ Деплой NWS Worker прошёл успешно!"}'
+          resp=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$json")
+          http_code=$(echo "$resp" | tail -n1)
+          body=$(echo "$resp" | sed '$d')
+          echo "Telegram API response (code=$http_code): $body"
+          if [ "$http_code" != "200" ]; then
+            echo "::warning::Notification failed. Check BOT_TOKEN and chat_id."
+          fi

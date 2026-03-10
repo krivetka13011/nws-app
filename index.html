@@ -438,7 +438,7 @@
             <h2 class="text-3xl font-bold text-white">История</h2>
             <div class="flex gap-2">
                 <button onclick="renderHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition" title="Обновить"><i class="fas fa-sync-alt"></i></button>
-                <button onclick="clearHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Очистить</button>
+                <button onclick="openDeleteSheet()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Удалить</button>
             </div>
         </div>
         <div id="historyList" class="space-y-4"></div>
@@ -469,6 +469,20 @@
             <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
                 <span class="text-lg text-white">Свой размер</span>
                 <span class="text-[var(--text-secondary)] text-sm">Калькулятор</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELETE SHEET -->
+    <div class="sheet-overlay" id="deleteSheet" onclick="closeDeleteSheet(event)">
+        <div class="sheet-content" onclick="event.stopPropagation()">
+            <div class="sheet-handle" onclick="closeDeleteSheet()"></div>
+            <h3 class="text-xl font-bold mb-2 px-2 text-white">Удалить заказы</h3>
+            <p class="text-sm text-[var(--text-secondary)] mb-4 px-2">Выберите полученные заказы (у которых обе кнопки зелёные). Фото будут удалены с хостинга.</p>
+            <div id="deleteSheetList" class="space-y-2 max-h-60 overflow-y-auto"></div>
+            <div class="flex gap-2 mt-4 px-2">
+                <button onclick="closeDeleteSheet()" class="flex-1 py-3 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white">Отмена</button>
+                <button onclick="deleteSelectedOrders()" class="flex-1 py-3 rounded-xl bg-[var(--danger-color)] text-white font-medium">Удалить выбранные</button>
             </div>
         </div>
     </div>
@@ -573,11 +587,12 @@
                 if (JSON.stringify(storageObj).length > 3500 && storageObj.itemsData) {
                     storageObj.itemsData = storageObj.itemsData.map(i => {
                         const imgUrls = (i.imgUrls || []).slice(0, 2);
-                        return { ...i, imgUrls };
+                        const imgDeleteUrls = (i.imgDeleteUrls || []).slice(0, imgUrls.length);
+                        return { ...i, imgUrls, imgDeleteUrls };
                     });
                     if (JSON.stringify(storageObj).length > 25000) {
                         storageObj.itemsData = storageObj.itemsData.map(i => {
-                            const { imgUrls, ...rest } = i;
+                            const { imgUrls, imgDeleteUrls, ...rest } = i;
                             return rest;
                         });
                     }
@@ -888,7 +903,7 @@
                 </div>
             `;
             document.getElementById('orderItemsList').insertAdjacentHTML('beforeend', html);
-            orderItems.push({ id, link: '', price: 0, resYuan: 0, resRub: 0, imgUrls: [] });
+            orderItems.push({ id, link: '', price: 0, resYuan: 0, resRub: 0, imgUrls: [], imgDeleteUrls: [] });
             updateDeleteButtons('order'); updateItemNumbers('order');
         }
 
@@ -934,7 +949,7 @@
                 await addToHistoryV2({
                     title: 'Заказ на выкуп', date: new Date().toLocaleString('ru-RU'),
                     delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
-                    price: priceHtml, totalRub, itemsData: orderItems, images: historyImages,
+                    price: priceHtml, totalRub, itemsData: orderItems.map(i => ({ ...i, imgDeleteUrls: i.imgDeleteUrls || [] })), images: historyImages,
                     orderId, timestamp: orderTs,
                     orderStatus: '🔴 Заказ: Не оплачен', deliveryStatus: '🔴 Доставка: Счёт не выставлен'
                 });
@@ -1009,7 +1024,7 @@
                 </div>
             `;
             document.getElementById('searchItemsList').insertAdjacentHTML('beforeend', html);
-            searchItems.push({ id, comment: '', imgUrls: [] });
+            searchItems.push({ id, comment: '', imgUrls: [], imgDeleteUrls: [] });
             updateDeleteButtons('search'); updateItemNumbers('search');
         }
 
@@ -1062,10 +1077,15 @@
                     const data = await response.json();
                     document.getElementById(loadId).remove();
                     if (data.success && data.data) {
-                        const imgUrl = data.data.url; const thumbUrl = (data.data.thumb && data.data.thumb.url) || imgUrl;
+                        const imgUrl = data.data.url; const deleteUrl = data.data.delete_url || null;
+                        const thumbUrl = (data.data.thumb && data.data.thumb.url) || imgUrl;
                         const list = type === 'order' ? orderItems : searchItems;
                         const item = list.find(i => i.id === id);
-                        if (item) item.imgUrls.push(imgUrl);
+                        if (item) {
+                            item.imgUrls.push(imgUrl);
+                            item.imgDeleteUrls = item.imgDeleteUrls || [];
+                            item.imgDeleteUrls.push(deleteUrl);
+                        }
                         const imgDiv = document.createElement('div');
                         imgDiv.className = 'preview-item';
                         imgDiv.innerHTML = `<img src="${thumbUrl}" onclick="openLightbox('${imgUrl}')"><div class="preview-remove" onclick="removeImage(${id}, '${imgUrl}', '${type}', this)"><i class="fas fa-times"></i></div>`;
@@ -1087,7 +1107,11 @@
         function removeImage(itemId, imgUrl, type, btnElement) {
             const list = type === 'order' ? orderItems : searchItems;
             const item = list.find(i => i.id === itemId);
-            if (item) item.imgUrls = item.imgUrls.filter(url => url !== imgUrl);
+            if (item) {
+                const idx = item.imgUrls.indexOf(imgUrl);
+                item.imgUrls = item.imgUrls.filter(url => url !== imgUrl);
+                if (item.imgDeleteUrls && idx >= 0) item.imgDeleteUrls.splice(idx, 1);
+            }
             btnElement.parentElement.remove();
         }
 
@@ -1123,21 +1147,82 @@
             } catch (e) { return null; }
         }
 
-        async function clearHistory() {
-            if (!confirm('Очистить всю историю заказов?')) return;
-            const userId = getHistoryUserId();
-            try {
-                if (userId) {
-                    const res = await fetch(`${WORKER_URL}/api/history`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: String(userId), history: [] })
-                    });
-                    if (res.ok) { renderHistory(); return; }
+        let deleteSheetSelections = []; // { index, item, status }
+
+        function openDeleteSheet() {
+            const container = document.getElementById('deleteSheetList');
+            container.innerHTML = '<div class="text-center py-4 text-[var(--text-secondary)]">Загрузка...</div>';
+            document.getElementById('deleteSheet').classList.add('open');
+            loadDeletableOrders(container);
+        }
+
+        async function loadDeletableOrders(container) {
+            const [history, allOrders] = await Promise.all([loadFullHistory(), fetchOrdersForClient()]);
+            const deletable = [];
+            for (let i = 0; i < history.length; i++) {
+                const item = history[i];
+                if (item.title !== 'Заказ на выкуп') continue;
+                let status = findOrderStatus(allOrders, item);
+                if (!status && (item.orderNumber || item.orderId)) {
+                    status = await fetchOrderStatus(item.orderId, item.orderNumber);
+                    if (status) status = { orderId: item.orderId, orderNumber: item.orderNumber, ...status };
                 }
-                localStorage.setItem(HISTORY_LOCAL_KEY, '[]');
+                if (status && status.orderPaid && status.deliveryPaid) {
+                    deletable.push({ index: i, item, status });
+                }
+            }
+            deleteSheetSelections = deletable;
+            if (deletable.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-[var(--text-secondary)]">Нет заказов для удаления. Доступны только заказы с оплаченным заказом и доставкой.</div>';
+                return;
+            }
+            container.innerHTML = deletable.map(({ index, item }) => {
+                const title = (item.orderNumber ? `Заказ №${item.orderNumber}` : item.title);
+                return `<label class="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-color)] hover:bg-white/5 cursor-pointer">
+                    <input type="checkbox" class="delete-order-cb" data-index="${index}">
+                    <span class="text-white">${title}</span>
+                    <span class="text-sm text-[var(--text-secondary)]">${item.date || ''}</span>
+                </label>`;
+            }).join('');
+        }
+
+        function closeDeleteSheet(event) {
+            if (!event || event.target === document.getElementById('deleteSheet') || event.target.classList.contains('sheet-handle')) {
+                document.getElementById('deleteSheet').classList.remove('open');
+            }
+        }
+
+        async function deleteSelectedOrders() {
+            const checked = Array.from(document.querySelectorAll('.delete-order-cb:checked')).map(el => parseInt(el.dataset.index, 10));
+            if (checked.length === 0) { alert('Выберите заказы для удаления'); return; }
+            const history = await loadFullHistory();
+            const toRemove = new Set(checked);
+            const deleteUrls = [];
+            for (const { index, item } of deleteSheetSelections) {
+                if (!toRemove.has(index)) continue;
+                if (item.itemsData) {
+                    for (const prod of item.itemsData) {
+                        const urls = prod.imgDeleteUrls || [];
+                        for (const u of urls) if (u && typeof u === 'string') deleteUrls.push(u);
+                    }
+                }
+            }
+            try {
+                if (deleteUrls.length > 0) {
+                    await fetch(`${WORKER_URL}/api/delete-images`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ deleteUrls })
+                    });
+                }
+                const newHistory = history.filter((_, i) => !toRemove.has(i));
+                await saveHistoryToBackend(newHistory, getHistoryUserId());
+                closeDeleteSheet({ target: document.getElementById('deleteSheet') });
                 renderHistory();
-            } catch (e) { console.error(e); alert('Ошибка: ' + e.message); }
+            } catch (e) {
+                console.error(e);
+                alert('Ошибка: ' + e.message);
+            }
         }
 
         async function fetchOrdersForClient() {

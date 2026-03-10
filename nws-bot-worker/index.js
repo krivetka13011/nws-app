@@ -456,6 +456,37 @@ export default {
       }
     }
 
+    // POST /api/delete-images — удаление фото с ImgBB по delete_url
+    if (request.method === 'POST' && url.pathname === '/api/delete-images') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
+      }
+      const { deleteUrls } = body;
+      if (!Array.isArray(deleteUrls) || deleteUrls.length === 0) {
+        return jsonResponse({ ok: true });
+      }
+      const validUrls = deleteUrls.filter(u => typeof u === 'string' && u.includes('ibb.co'));
+      for (const delUrl of validUrls) {
+        try {
+          const m = delUrl.match(/ibb\.co\/([^/]+)\/([^/?#]+)/);
+          if (!m) continue;
+          const [, imageId, imageHash] = m;
+          const fd = new FormData();
+          fd.append('pathname', `/${imageId}/${imageHash}`);
+          fd.append('action', 'delete');
+          fd.append('delete', 'image');
+          fd.append('from', 'resource');
+          fd.append('deleting[id]', imageId);
+          fd.append('deleting[hash]', imageHash);
+          await fetch('https://ibb.co/json', { method: 'POST', body: fd });
+        } catch (_) { /* ignore per-image errors */ }
+      }
+      return jsonResponse({ ok: true });
+    }
+
     // Переустановить webhook (включая callback_query)
     if (request.method === 'GET' && url.pathname === '/set-webhook') {
       const webhookUrl = `${url.origin}/webhook/${env.WEBHOOK_SECRET}`;
