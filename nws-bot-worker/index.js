@@ -194,7 +194,7 @@ export default {
       const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
 
       for (let idx = nextIdx; idx < end; idx++) {
-        if (idx > nextIdx) await sleep(500);
+        if (idx > nextIdx) await sleep(200);
         let lastErr;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
@@ -643,12 +643,12 @@ async function sendItemMedia(env, item, textMsg, dest) {
 
   const mediaBatchSize = 10;
   for (let start = 0; start < imgUrls.length; start += mediaBatchSize) {
-    if (start > 0) await sleep(400);
+    if (start > 0) await sleep(150);
     const batch = imgUrls.slice(start, start + mediaBatchSize);
 
     let sent = await sendMediaGroupWithUpload(env, batch, textMsg, dest);
     if (!sent) {
-      await sleep(1000);
+      await sleep(400);
       sent = await sendMediaGroupWithUpload(env, batch, textMsg, dest);
     }
     if (sent) continue;
@@ -669,7 +669,7 @@ async function sendItemMedia(env, item, textMsg, dest) {
         await callTelegram(env, 'sendPhoto', {
           ...dest, photo: batch[i], caption: i === 0 ? textMsg : undefined, parse_mode: 'HTML'
         });
-        if (i < batch.length - 1) await sleep(200);
+        if (i < batch.length - 1) await sleep(80);
       }
     }
   }
@@ -806,7 +806,7 @@ async function releaseOrderLock(env, clientId, workerUrl) {
     await env.CLIENTS.put(`order_by_num_${orderData.orderNumber}`, orderId);
 
     for (let idx = 0; idx < items.length; idx++) {
-      if (idx > 0) await sleep(500);
+      if (idx > 0) await sleep(200);
       for (let a = 0; a < 3; a++) {
         try { await sendOrderItem(env, items[idx], idx, dest, isWhite); break; } catch (e) {
           if (a < 2) await sleep(2000);
@@ -824,7 +824,7 @@ async function releaseOrderLock(env, clientId, workerUrl) {
     await sendWithRetry(env, 'sendMessage', { ...dest, text: header, parse_mode: 'HTML' });
 
     for (let idx = 0; idx < items.length; idx++) {
-      if (idx > 0) await sleep(500);
+      if (idx > 0) await sleep(200);
       for (let a = 0; a < 3; a++) {
         try { await sendSearchItem(env, items[idx], idx, dest); break; } catch (e) {
           if (a < 2) await sleep(2000);
@@ -1675,7 +1675,7 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
   await addToBroadcastList(env, chatId);
 
   for (let idx = 0; idx < items.length; idx++) {
-    if (idx > 0) await sleep(500);
+    if (idx > 0) await sleep(200);
     for (let a = 0; a < 3; a++) {
       try {
         await sendOrderItem(env, items[idx], idx, dest, isWhite);
@@ -1736,7 +1736,7 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
   }
 
   for (let idx = 0; idx < items.length; idx++) {
-    if (idx > 0) await sleep(500);
+    if (idx > 0) await sleep(200);
     for (let a = 0; a < 3; a++) {
       try {
         await sendSearchItem(env, items[idx], idx, dest);
