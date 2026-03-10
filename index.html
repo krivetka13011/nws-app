@@ -478,7 +478,7 @@
         <div class="sheet-content" onclick="event.stopPropagation()">
             <div class="sheet-handle" onclick="closeDeleteSheet()"></div>
             <h3 class="text-xl font-bold mb-2 px-2 text-white">Удалить заказы</h3>
-            <p class="text-sm text-[var(--text-secondary)] mb-4 px-2">Выберите полученные заказы (у которых обе кнопки зелёные). Фото будут удалены с хостинга.</p>
+            <p class="text-sm text-[var(--text-secondary)] mb-4 px-2">Выберите заказы для удаления. Фото будут удалены с хостинга.</p>
             <div id="deleteSheetList" class="space-y-2 max-h-60 overflow-y-auto"></div>
             <div class="flex gap-2 mt-4 px-2">
                 <button onclick="closeDeleteSheet()" class="flex-1 py-3 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white">Отмена</button>
@@ -1147,7 +1147,7 @@
             } catch (e) { return null; }
         }
 
-        let deleteSheetSelections = []; // { index, item, status }
+        let deleteSheetSelections = [];
 
         function openDeleteSheet() {
             const container = document.getElementById('deleteSheetList');
@@ -1157,29 +1157,16 @@
         }
 
         async function loadDeletableOrders(container) {
-            const [history, allOrders] = await Promise.all([loadFullHistory(), fetchOrdersForClient()]);
-            const deletable = [];
-            for (let i = 0; i < history.length; i++) {
-                const item = history[i];
-                if (item.title !== 'Заказ на выкуп') continue;
-                let status = findOrderStatus(allOrders, item);
-                if (!status && (item.orderNumber || item.orderId)) {
-                    status = await fetchOrderStatus(item.orderId, item.orderNumber);
-                    if (status) status = { orderId: item.orderId, orderNumber: item.orderNumber, ...status };
-                }
-                if (status && status.orderPaid && status.deliveryPaid) {
-                    deletable.push({ index: i, item, status });
-                }
-            }
-            deleteSheetSelections = deletable;
-            if (deletable.length === 0) {
-                container.innerHTML = '<div class="text-center py-4 text-[var(--text-secondary)]">Нет заказов для удаления. Доступны только заказы с оплаченным заказом и доставкой.</div>';
+            const history = await loadFullHistory();
+            if (history.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-[var(--text-secondary)]">Нет заказов для удаления</div>';
                 return;
             }
-            container.innerHTML = deletable.map(({ index, item }) => {
-                const title = (item.orderNumber ? `Заказ №${item.orderNumber}` : item.title);
+            deleteSheetSelections = history.map((item, index) => ({ index, item }));
+            container.innerHTML = history.map((item, i) => {
+                const title = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title || 'Заказ');
                 return `<label class="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-color)] hover:bg-white/5 cursor-pointer">
-                    <input type="checkbox" class="delete-order-cb" data-index="${index}">
+                    <input type="checkbox" class="delete-order-cb" data-index="${i}">
                     <span class="text-white">${title}</span>
                     <span class="text-sm text-[var(--text-secondary)]">${item.date || ''}</span>
                 </label>`;
@@ -1198,13 +1185,12 @@
             const history = await loadFullHistory();
             const toRemove = new Set(checked);
             const deleteUrls = [];
-            for (const { index, item } of deleteSheetSelections) {
-                if (!toRemove.has(index)) continue;
-                if (item.itemsData) {
-                    for (const prod of item.itemsData) {
-                        const urls = prod.imgDeleteUrls || [];
-                        for (const u of urls) if (u && typeof u === 'string') deleteUrls.push(u);
-                    }
+            for (const idx of checked) {
+                const item = history[idx];
+                if (!item || !item.itemsData) continue;
+                for (const prod of item.itemsData) {
+                    const urls = prod.imgDeleteUrls || [];
+                    for (const u of urls) if (u && typeof u === 'string') deleteUrls.push(u);
                 }
             }
             try {
