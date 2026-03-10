@@ -183,6 +183,7 @@
             border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer;
         }
         .history-item:active { background-color: var(--active-bg); }
+        .history-checkbox input { width: 22px; height: 22px; accent-color: var(--primary-color); cursor: pointer; }
         .history-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
         .history-type { font-weight: 700; color: #60a5fa; font-size: 14px; text-transform: uppercase; }
         .history-date { color: var(--text-secondary); font-size: 12px; }
@@ -436,9 +437,11 @@
     <div id="tab-history" class="tab-content">
         <div class="flex items-center justify-between mb-6 px-2">
             <h2 class="text-3xl font-bold text-white">История</h2>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center">
                 <button onclick="renderHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition" title="Обновить"><i class="fas fa-sync-alt"></i></button>
-                <button onclick="openDeleteSheet()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Удалить</button>
+                <button id="btn-delete-toggle" onclick="toggleDeleteMode()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Удалить</button>
+                <button id="btn-cancel-delete" onclick="toggleDeleteMode()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hidden">Отмена</button>
+                <button id="btn-delete-confirm" onclick="confirmDeleteSelected()" class="text-sm px-4 py-2 rounded-xl bg-[var(--danger-color)] text-white hidden">Удалить выбранные</button>
             </div>
         </div>
         <div id="historyList" class="space-y-4"></div>
@@ -469,20 +472,6 @@
             <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
                 <span class="text-lg text-white">Свой размер</span>
                 <span class="text-[var(--text-secondary)] text-sm">Калькулятор</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- DELETE SHEET -->
-    <div class="sheet-overlay" id="deleteSheet" onclick="closeDeleteSheet(event)">
-        <div class="sheet-content" onclick="event.stopPropagation()">
-            <div class="sheet-handle" onclick="closeDeleteSheet()"></div>
-            <h3 class="text-xl font-bold mb-2 px-2 text-white">Удалить заказы</h3>
-            <p class="text-sm text-[var(--text-secondary)] mb-4 px-2">Выберите заказы для удаления. Фото будут удалены с хостинга.</p>
-            <div id="deleteSheetList" class="space-y-2 max-h-60 overflow-y-auto"></div>
-            <div class="flex gap-2 mt-4 px-2">
-                <button onclick="closeDeleteSheet()" class="flex-1 py-3 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white">Отмена</button>
-                <button onclick="deleteSelectedOrders()" class="flex-1 py-3 rounded-xl bg-[var(--danger-color)] text-white font-medium">Удалить выбранные</button>
             </div>
         </div>
     </div>
@@ -1174,41 +1163,31 @@
             } catch (e) { return null; }
         }
 
-        let deleteSheetSelections = [];
+        let deleteMode = false;
 
-        function openDeleteSheet() {
-            const container = document.getElementById('deleteSheetList');
-            container.innerHTML = '<div class="text-center py-4 text-[var(--text-secondary)]">Загрузка...</div>';
-            document.getElementById('deleteSheet').classList.add('open');
-            loadDeletableOrders(container);
+        function toggleDeleteCheckbox(index) {
+            const cb = document.querySelector(`.delete-order-cb[data-index="${index}"]`);
+            if (cb) cb.checked = !cb.checked;
         }
 
-        async function loadDeletableOrders(container) {
-            const history = await loadFullHistory();
-            if (history.length === 0) {
-                container.innerHTML = '<div class="text-center py-4 text-[var(--text-secondary)]">Нет заказов для удаления</div>';
-                return;
-            }
-            deleteSheetSelections = history.map((item, index) => ({ index, item }));
-            container.innerHTML = history.map((item, i) => {
-                const title = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : (item.title || 'Заказ');
-                return `<label class="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-color)] hover:bg-white/5 cursor-pointer">
-                    <input type="checkbox" class="delete-order-cb" data-index="${i}">
-                    <span class="text-white">${title}</span>
-                    <span class="text-sm text-[var(--text-secondary)]">${item.date || ''}</span>
-                </label>`;
-            }).join('');
+        function toggleDeleteMode() {
+            deleteMode = !deleteMode;
+            document.getElementById('btn-delete-toggle').classList.toggle('hidden', deleteMode);
+            document.getElementById('btn-cancel-delete').classList.toggle('hidden', !deleteMode);
+            document.getElementById('btn-delete-confirm').classList.toggle('hidden', !deleteMode);
+            renderHistory();
         }
 
-        function closeDeleteSheet(event) {
-            if (!event || event.target === document.getElementById('deleteSheet') || event.target.classList.contains('sheet-handle')) {
-                document.getElementById('deleteSheet').classList.remove('open');
-            }
+        function confirmDeleteSelected() {
+            const checked = Array.from(document.querySelectorAll('.delete-order-cb:checked')).map(el => parseInt(el.dataset.index, 10));
+            if (checked.length === 0) { alert('Выберите заказы для удаления'); return; }
+            if (!confirm('Действительно ли вы хотите удалить выбранные заказы?')) return;
+            deleteSelectedOrders();
         }
 
         async function deleteSelectedOrders() {
             const checked = Array.from(document.querySelectorAll('.delete-order-cb:checked')).map(el => parseInt(el.dataset.index, 10));
-            if (checked.length === 0) { alert('Выберите заказы для удаления'); return; }
+            if (checked.length === 0) return;
             const history = await loadFullHistory();
             const toRemove = new Set(checked);
             const deleteUrls = [];
@@ -1245,7 +1224,10 @@
                 }
                 const newHistory = history.filter((_, i) => !toRemove.has(i));
                 await saveHistoryToBackend(newHistory, getHistoryUserId());
-                closeDeleteSheet({ target: document.getElementById('deleteSheet') });
+                deleteMode = false;
+                document.getElementById('btn-delete-toggle').classList.remove('hidden');
+                document.getElementById('btn-cancel-delete').classList.add('hidden');
+                document.getElementById('btn-delete-confirm').classList.add('hidden');
                 renderHistory();
             } catch (e) {
                 console.error(e);
@@ -1375,13 +1357,20 @@
                     : '';
 
                 const titleDisplay = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : item.title;
+                const checkboxHtml = deleteMode
+                    ? `<label class="history-checkbox shrink-0 mt-1" onclick="event.stopPropagation()"><input type="checkbox" class="delete-order-cb" data-index="${i}"></label>`
+                    : '';
+                const itemOnclick = deleteMode ? `onclick="toggleDeleteCheckbox(${i})"` : `onclick="openHistoryDetails(${i})"`;
                 const html = `
-                    <div class="history-item" onclick="openHistoryDetails(${i})">
-                        <div class="history-header"><span class="history-type">${titleDisplay}</span><span class="history-date">${item.date}</span></div>
-                        <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
-                        ${statusHtml}
-                        ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
-                        ${imagesHtml}
+                    <div class="history-item flex gap-3 items-start" ${itemOnclick}>
+                        ${checkboxHtml}
+                        <div class="flex-1 min-w-0">
+                            <div class="history-header"><span class="history-type">${titleDisplay}</span><span class="history-date">${item.date}</span></div>
+                            <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
+                            ${statusHtml}
+                            ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
+                            ${imagesHtml}
+                        </div>
                     </div>
                 `;
                 container.insertAdjacentHTML('beforeend', html);
