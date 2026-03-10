@@ -1237,12 +1237,12 @@
                         body: JSON.stringify({ deleteUrls })
                     });
                 }
-                for (const { orderId, orderNumber } of toMarkDeleted) {
+                if (toMarkDeleted.length > 0) {
                     try {
                         await fetch(`${WORKER_URL}/api/mark-order-deleted`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ orderId, orderNumber })
+                            body: JSON.stringify({ orders: toMarkDeleted })
                         });
                     } catch (_) {}
                 }

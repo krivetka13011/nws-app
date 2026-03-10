@@ -600,6 +600,7 @@ export default {
     }
 
     // POST /api/mark-order-deleted — пометить заказ/заявку как удалённую у менеджера
+    // Поддерживает одиночный вызов { orderId, orderNumber } или batch { orders: [{ orderId, orderNumber }, ...] }
     if (request.method === 'POST' && url.pathname === '/api/mark-order-deleted') {
       let body;
       try {
@@ -607,46 +608,50 @@ export default {
       } catch (_) {
         return jsonResponse({ ok: false, error: 'Invalid JSON' }, 400);
       }
-      const { orderId, orderNumber } = body;
-      if (!orderId && !orderNumber) {
-        return jsonResponse({ ok: false, error: 'orderId or orderNumber required' }, 400);
+      const orders = Array.isArray(body.orders) ? body.orders : (body.orderId || body.orderNumber ? [body] : []);
+      if (orders.length === 0) {
+        return jsonResponse({ ok: false, error: 'orderId/orderNumber or orders array required' }, 400);
       }
       try {
-        let oid = orderId;
-        if (!oid && orderNumber) {
-          oid = await env.CLIENTS.get(`order_by_num_${orderNumber}`);
-          if (!oid) return jsonResponse({ ok: true });
-        }
-        const isSearch = String(oid || '').startsWith('search_');
-        let dest = null;
-        let messageIds = [];
-        if (isSearch) {
-          const metaRaw = await env.CLIENTS.get(`search_meta_${oid}`);
-          if (metaRaw) {
-            const meta = JSON.parse(metaRaw);
-            dest = meta.dest;
-            messageIds = meta.messageIds || (meta.headerMsgId ? [meta.headerMsgId] : []);
-            await env.CLIENTS.delete(`search_meta_${oid}`);
+        for (const { orderId, orderNumber } of orders) {
+          if (!orderId && !orderNumber) continue;
+          let oid = orderId;
+          if (!oid && orderNumber) {
+            oid = await env.CLIENTS.get(`order_by_num_${orderNumber}`);
+            if (!oid) continue;
           }
-        } else {
-          const orderRaw = await env.CLIENTS.get(`order_${oid}`);
-          if (orderRaw) {
-            const od = JSON.parse(orderRaw);
-            dest = od.dest;
-            messageIds = od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : []);
-            await env.CLIENTS.delete(`order_${oid}`);
+          const isSearch = String(oid || '').startsWith('search_');
+          let dest = null;
+          let messageIds = [];
+          if (isSearch) {
+            const metaRaw = await env.CLIENTS.get(`search_meta_${oid}`);
+            if (metaRaw) {
+              const meta = JSON.parse(metaRaw);
+              dest = meta.dest;
+              messageIds = meta.messageIds || (meta.headerMsgId ? [meta.headerMsgId] : []);
+              await env.CLIENTS.delete(`search_meta_${oid}`);
+            }
+          } else {
+            const orderRaw = await env.CLIENTS.get(`order_${oid}`);
+            if (orderRaw) {
+              const od = JSON.parse(orderRaw);
+              dest = od.dest;
+              messageIds = od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : []);
+              await env.CLIENTS.delete(`order_${oid}`);
+            }
           }
-        }
-        if (dest && messageIds.length > 0) {
-          for (const mid of messageIds) {
-            try {
-              const opts = { chat_id: dest.chat_id, message_id: mid };
-              if (dest.message_thread_id) opts.message_thread_id = dest.message_thread_id;
-              await callTelegram(env, 'deleteMessage', opts);
-            } catch (_) {}
+          if (dest && messageIds.length > 0) {
+            for (const mid of messageIds) {
+              try {
+                const opts = { chat_id: dest.chat_id, message_id: mid };
+                if (dest.message_thread_id) opts.message_thread_id = dest.message_thread_id;
+                await callTelegram(env, 'deleteMessage', opts);
+                await sleep(150);
+              } catch (_) {}
+            }
           }
+          if (orderNumber) await env.CLIENTS.delete(`order_by_num_${orderNumber}`);
         }
-        if (orderNumber) await env.CLIENTS.delete(`order_by_num_${orderNumber}`);
         return jsonResponse({ ok: true });
       } catch (e) {
         console.error('mark-order-deleted:', e);
@@ -1325,13 +1330,16 @@ async function broadcastToAllUsers(env, msg) {
 async function getAndIncrementOrderCounter(env) {
   if (!env.CLIENTS) return 1;
   const key = 'order_counter';
-  let n = 1;
-  try {
+  for (let attempt = 0; attempt < 15; attempt++) {
     const v = await env.CLIENTS.get(key);
-    if (v) n = parseInt(v, 10) || 1;
-  } catch (_) {}
-  await env.CLIENTS.put(key, String(n + 1));
-  return n;
+    const n = v ? (parseInt(v, 10) || 1) : 1;
+    const next = n + 1;
+    await env.CLIENTS.put(key, String(next));
+    await sleep(30);
+    const check = await env.CLIENTS.get(key);
+    if (parseInt(check, 10) <= next) return n;
+  }
+  return Math.max(1, (Date.now() % 100000) + 1);
 }
 
 // ===== Payment helpers =====
@@ -1745,6 +1753,18 @@ async function forwardClientMessageToTopic(env, msg, topicId) {
       video: msg.video.file_id,
       caption: `— ${tag}`
     });
+  } else if (msg.video_note) {
+    res = await callTelegram(env, 'sendVideoNote', {
+      ...opts,
+      video_note: msg.video_note.file_id
+    });
+    if (res?.ok && tag && res.result?.message_id) {
+      await callTelegram(env, 'sendMessage', {
+        ...opts,
+        text: `— ${tag}`,
+        reply_to_message_id: res.result.message_id
+      });
+    }
   } else if (msg.sticker) {
     res = await callTelegram(env, 'sendSticker', { ...opts, sticker: msg.sticker.file_id });
   }
@@ -1766,6 +1786,15 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
       chat_id: clientId,
       photo: photo.file_id,
       caption: text ? MANAGER_MSG_PREFIX + text : 'Сообщение от менеджера:'
+    });
+  } else if (msg.video_note) {
+    await callTelegram(env, 'sendMessage', {
+      chat_id: clientId,
+      text: 'Сообщение от менеджера:'
+    });
+    await callTelegram(env, 'sendVideoNote', {
+      chat_id: clientId,
+      video_note: msg.video_note.file_id
     });
   } else if (msg.document || msg.voice || msg.audio || msg.video) {
     await callTelegram(env, 'sendMessage', {
