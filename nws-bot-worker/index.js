@@ -153,21 +153,22 @@ export default {
           });
         }
 
-        if (sent?.result?.message_id) {
-          orderData.pinnedMsgId = sent.result.message_id;
-          orderData.dest = { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id };
-          if (dest.message_thread_id) {
-            await callTelegram(env, 'pinChatMessage', {
-              chat_id: groupId, message_id: sent.result.message_id, disable_notification: true
-            });
-          }
+        if (!sent?.ok || !sent?.result?.message_id) {
+          throw new Error('Не удалось отправить сообщение о заказе менеджеру');
+        }
+        orderData.pinnedMsgId = sent.result.message_id;
+        orderData.dest = { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id };
+        if (dest.message_thread_id) {
+          await callTelegram(env, 'pinChatMessage', {
+            chat_id: groupId, message_id: sent.result.message_id, disable_notification: true
+          });
         }
 
         await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
         await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
         await addToBroadcastList(env, chatId);
 
-        // Save items for continuation processing
+        // Save items for continuation processing (only after header confirmed sent)
         await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
           type: 'order', items, dest, isWhite, clientId: chatId,
           orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
@@ -274,80 +275,87 @@ export default {
       const { orderId } = body;
       if (!orderId) return jsonResponse({ error: 'orderId required' }, 400);
 
-      const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
-      if (!raw) return jsonResponse({ ok: true, done: true, processed: 0 });
+      const lockKey = await acquireItemsLock(env, orderId);
+      if (!lockKey) return jsonResponse({ ok: true, busy: true }, 200);
 
-      const job = JSON.parse(raw);
-      const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-      const ITEMS_PER_CALL = 4;
-      const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
+      try {
+        const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+        if (!raw) return jsonResponse({ ok: true, done: true, processed: 0 });
 
-      const msgIds = [];
-      for (let idx = nextIdx; idx < end; idx++) {
-        if (idx > nextIdx) await sleep(80);
-        let lastErr;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            if (job.type === 'order') {
-              await sendOrderItem(env, items[idx], idx, dest, isWhite, msgIds);
-            } else {
-              await sendSearchItem(env, items[idx], idx, dest, msgIds);
+        const job = JSON.parse(raw);
+        const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
+        const ITEMS_PER_CALL = 4;
+        const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
+
+        const msgIds = [];
+        for (let idx = nextIdx; idx < end; idx++) {
+          if (idx > nextIdx) await sleep(80);
+          let lastErr;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              if (job.type === 'order') {
+                await sendOrderItem(env, items[idx], idx, dest, isWhite, msgIds);
+              } else {
+                await sendSearchItem(env, items[idx], idx, dest, msgIds);
+              }
+              lastErr = null;
+              break;
+            } catch (e) {
+              lastErr = e;
+              console.error(`continue-order item ${idx} attempt ${attempt + 1}:`, e);
+              if (attempt < 2) await sleep(2000);
             }
-            lastErr = null;
-            break;
-          } catch (e) {
-            lastErr = e;
-            console.error(`continue-order item ${idx} attempt ${attempt + 1}:`, e);
-            if (attempt < 2) await sleep(2000);
           }
         }
-      }
 
-      if (job.type === 'order' && msgIds.length > 0) {
-        const raw = await env.CLIENTS.get(`order_${orderId}`);
-        if (raw) {
-          const od = JSON.parse(raw);
-          od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(msgIds);
-          await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
+        if (job.type === 'order' && msgIds.length > 0) {
+          const raw = await env.CLIENTS.get(`order_${orderId}`);
+          if (raw) {
+            const od = JSON.parse(raw);
+            od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(msgIds);
+            await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
+          }
+        } else if (job.type === 'search' && msgIds.length > 0) {
+          const metaRaw = await env.CLIENTS.get(`search_meta_${orderId}`);
+          if (metaRaw) {
+            const meta = JSON.parse(metaRaw);
+            meta.messageIds = (meta.messageIds || []).concat(msgIds);
+            await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify(meta));
+          } else {
+            await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+              headerMsgId: msgIds[0],
+              messageIds: msgIds,
+              dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
+            }));
+          }
         }
-      } else if (job.type === 'search' && msgIds.length > 0) {
-        const metaRaw = await env.CLIENTS.get(`search_meta_${orderId}`);
-        if (metaRaw) {
-          const meta = JSON.parse(metaRaw);
-          meta.messageIds = (meta.messageIds || []).concat(msgIds);
-          await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify(meta));
-        } else {
-          await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
-            headerMsgId: msgIds[0],
-            messageIds: msgIds,
-            dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
-          }));
-        }
-      }
 
-      if (end < items.length) {
-        job.nextIdx = end;
-        await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
-        return jsonResponse({ ok: true, done: false, processed: end, total: items.length });
-      }
-
-      // All items done
-      await env.CLIENTS.delete(`pending_items_${orderId}`);
-      try {
-        if (job.type === 'order') {
-          await finishOrder(env, job);
-        } else {
-          await sendWithRetry(env, 'sendMessage', {
-            chat_id: clientId,
-            text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
-            parse_mode: 'HTML'
-          });
+        if (end < items.length) {
+          job.nextIdx = end;
+          await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
+          return jsonResponse({ ok: true, done: false, processed: end, total: items.length });
         }
-      } catch (e) {
-        console.error('continue-order finish error:', e);
+
+        // All items done
+        await env.CLIENTS.delete(`pending_items_${orderId}`);
+        try {
+          if (job.type === 'order') {
+            await finishOrder(env, job);
+          } else {
+            await sendWithRetry(env, 'sendMessage', {
+              chat_id: clientId,
+              text: '  ✅  <b>Заявка на поиск отправлена менеджеру.</b>',
+              parse_mode: 'HTML'
+            });
+          }
+        } catch (e) {
+          console.error('continue-order finish error:', e);
+        }
+        await releaseOrderLock(env, clientId, job.workerUrl);
+        return jsonResponse({ ok: true, done: true, processed: items.length, total: items.length });
+      } finally {
+        releaseItemsLock(env, lockKey);
       }
-      await releaseOrderLock(env, clientId, job.workerUrl);
-      return jsonResponse({ ok: true, done: true, processed: items.length, total: items.length });
     }
 
     // PUT /api/history — заменить всю историю (для очистки и обновления orderNumber)
@@ -744,15 +752,18 @@ async function processPendingOrdersCron(env) {
     if (!list.keys.length) return;
     const key = list.keys[0].name;
     const orderId = key.replace('pending_items_', '');
-    const raw = await env.CLIENTS.get(key);
-    if (!raw) return;
-    const job = JSON.parse(raw);
-    const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-    const ITEMS_PER_CALL = 4;
-    const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
-    const msgIds = [];
+    const lockKey = await acquireItemsLock(env, orderId);
+    if (!lockKey) return;
+    try {
+      const raw = await env.CLIENTS.get(key);
+      if (!raw) return;
+      const job = JSON.parse(raw);
+      const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
+      const ITEMS_PER_CALL = 4;
+      const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
+      const msgIds = [];
 
-    for (let idx = nextIdx; idx < end; idx++) {
+      for (let idx = nextIdx; idx < end; idx++) {
       if (idx > nextIdx) await sleep(500);
       let lastErr;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -823,6 +834,9 @@ async function processPendingOrdersCron(env) {
     }
     const workerUrl = job.workerUrl || env.WORKER_URL || '';
     await releaseOrderLock(env, clientId, workerUrl);
+    } finally {
+      releaseItemsLock(env, lockKey);
+    }
   } catch (e) {
     console.error('processPendingOrdersCron:', e);
   }
@@ -858,9 +872,10 @@ async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) 
       const data = await callTelegram(env, method, payload);
       if (data.ok) return data;
 
-      // Non-retryable errors — return immediately
-      if (data.error_code === 400) return data;
-      if (data.error_code === 403) return data;
+      // Non-retryable errors — throw so caller knows send failed
+      if (data.error_code === 400 || data.error_code === 403) {
+        throw new Error(data?.description || 'Telegram API error');
+      }
 
       const retryAfter = data.parameters?.retry_after;
       if (retryAfter && attempt < retries - 1) {
@@ -872,7 +887,10 @@ async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) 
         continue;
       }
 
-      if (attempt === retries - 1) return data;
+      if (attempt === retries - 1) {
+        if (!data?.ok) throw new Error(data?.description || 'Telegram API error');
+        return data;
+      }
       await sleep(delayMs * (attempt + 1));
     } catch (e) {
       console.error(`sendWithRetry ${method} attempt ${attempt + 1}/${retries}:`, e);
@@ -880,6 +898,7 @@ async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) 
       await sleep(delayMs * (attempt + 1));
     }
   }
+  throw new Error('sendWithRetry exhausted');
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -1029,6 +1048,22 @@ async function finishOrder(env, job) {
     orderData.clientStatusMsgId = clientStatusSent.result.message_id;
     await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
   }
+}
+
+// ===== Items processing lock (prevent duplicate sends when cron + retries overlap) =====
+
+async function acquireItemsLock(env, orderId) {
+  const lockKey = `items_lock_${orderId}`;
+  const ourId = crypto.randomUUID();
+  await env.CLIENTS.put(lockKey, ourId, { expirationTtl: 120 });
+  await sleep(200);
+  const check = await env.CLIENTS.get(lockKey);
+  if (check !== ourId) return null;
+  return lockKey;
+}
+
+function releaseItemsLock(env, lockKey) {
+  if (lockKey) return env.CLIENTS.delete(lockKey);
 }
 
 // ===== Order queue: per-client lock =====
