@@ -303,6 +303,7 @@ export default {
             } catch (e) {
               lastErr = e;
               console.error(`continue-order item ${idx} attempt ${attempt + 1}:`, e);
+              if (isNetworkUncertaintyError(e)) break;
               if (attempt < 2) await sleep(2000);
             }
           }
@@ -778,6 +779,7 @@ async function processPendingOrdersCron(env) {
         } catch (e) {
           lastErr = e;
           console.error('cron item', idx, 'attempt', attempt + 1, e);
+          if (isNetworkUncertaintyError(e)) break;
           if (attempt < 2) await sleep(2000);
         }
       }
@@ -903,6 +905,11 @@ async function sendWithRetry(env, method, payload, retries = 5, delayMs = 1500) 
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function isNetworkUncertaintyError(e) {
+  const msg = String(e?.message || e || '').toLowerCase();
+  return /fetch|timeout|network|connection|reset|econnreset|enotfound|etimedout/i.test(msg) ||
+    e?.name === 'TypeError';
+}
 
 async function sendOrderItem(env, item, idx, dest, isWhite, msgIds) {
   const resYuan = Number(item.resYuan ?? item.price ?? 0) || 0;
