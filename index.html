@@ -955,8 +955,11 @@
         }
 
         async function sendOrder() {
+            const btn = document.getElementById('btn-action-order');
+            if (btn?.disabled) return;
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...'; }
 
                 let totalRub = 0;
                 let totalYuan = 0;
@@ -982,9 +985,6 @@
                     orderId, timestamp: orderTs,
                     orderStatus: '🔴 Заказ: Не оплачен', deliveryStatus: '🔴 Доставка: Счёт не выставлен'
                 });
-
-                const btn = document.getElementById('btn-action-order');
-                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...'; }
 
                 // Use API path for full photo support
                 const apiBody = {

@@ -108,19 +108,44 @@ export default {
 
         const ts = timestamp || Date.now();
         const orderId = `${chatId}_${ts}`;
-        const orderData = {
-          clientId: chatId,
-          orderNumber,
-          orderPaid: false,
-          deliveryPaid: false,
-          deliveryAmount: null,
-          summaryText,
-          totalRub,
-          pinnedMsgId: null,
-          createdAt: ts
-        };
+        const createLockKey = await acquireItemsLock(env, `create_${orderId}`);
+        if (!createLockKey) {
+          await sleep(1500);
+          const ep = await env.CLIENTS.get(`pending_items_${orderId}`);
+          if (ep) {
+            const ej = JSON.parse(ep);
+            const odRaw = await env.CLIENTS.get(`order_${orderId}`);
+            const od = odRaw ? JSON.parse(odRaw) : {};
+            return jsonResponse({
+              ok: true, orderId, orderNumber: od.orderNumber || ej.orderNumber,
+              totalItems: (ej.items || []).length, processed: ej.nextIdx || 0
+            });
+          }
+          return jsonResponse({ ok: false, error: 'Повторите попытку' }, 409);
+        }
+        try {
+          const existingPending = await env.CLIENTS.get(`pending_items_${orderId}`);
+          if (existingPending) {
+            const ej = JSON.parse(existingPending);
+            const odRaw = await env.CLIENTS.get(`order_${orderId}`);
+            const od = odRaw ? JSON.parse(odRaw) : {};
+            return jsonResponse({
+              ok: true, orderId, orderNumber: od.orderNumber || ej.orderNumber,
+              totalItems: (ej.items || []).length, processed: ej.nextIdx || 0
+            });
+          }
+          const orderData = {
+            clientId: chatId,
+            orderNumber,
+            orderPaid: false,
+            deliveryPaid: false,
+            deliveryAmount: null,
+            summaryText,
+            totalRub,
+            pinnedMsgId: null,
+            createdAt: ts
+          };
 
-        // Topic creation, summary, pin — synchronously
         const { topicId } = await getOrCreateTopic(env, chatId, user);
         const groupId = getGroupId(env);
         let dest = topicId
@@ -128,7 +153,17 @@ export default {
           : { chat_id: Number(env.MANAGER_ID) };
 
         const lockAcquired = await acquireOrderLock(env, chatId, orderId);
-        if (!lockAcquired) {
+        if (lockAcquired.sameOrder) {
+          const ep = await env.CLIENTS.get(`pending_items_${orderId}`);
+          if (ep) {
+            const ej = JSON.parse(ep);
+            return jsonResponse({
+              ok: true, orderId, orderNumber: orderData.orderNumber,
+              totalItems: items.length, processed: ej.nextIdx || 0
+            });
+          }
+        }
+        if (!lockAcquired.acquired) {
           await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
           await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
           await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
@@ -168,13 +203,15 @@ export default {
         await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
         await addToBroadcastList(env, chatId);
 
-        // Save items for continuation processing (only after header confirmed sent)
         await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify({
           type: 'order', items, dest, isWhite, clientId: chatId,
           orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
         }));
 
         return jsonResponse({ ok: true, orderId, orderNumber, totalItems: items.length, processed: 0 });
+        } finally {
+          releaseItemsLock(env, createLockKey);
+        }
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
       }
@@ -210,7 +247,17 @@ export default {
           `  📦  Позиций: ${items.length}`;
 
         const lockAcquired = await acquireOrderLock(env, chatId, orderId);
-        if (!lockAcquired) {
+        if (lockAcquired.sameOrder) {
+          const ep = await env.CLIENTS.get(`pending_items_${orderId}`);
+          if (ep) {
+            const ej = JSON.parse(ep);
+            return jsonResponse({
+              ok: true, orderId, orderNumber,
+              totalItems: items.length, processed: ej.nextIdx || 0
+            });
+          }
+        }
+        if (!lockAcquired.acquired) {
           await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
           await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
             type: 'search', orderId, orderNumber, items, dest, clientId: chatId, header, workerUrl: url.origin
@@ -1078,17 +1125,17 @@ function releaseItemsLock(env, lockKey) {
 async function acquireOrderLock(env, clientId, orderId) {
   const lockKey = `order_lock_${clientId}`;
   const existing = await env.CLIENTS.get(lockKey);
-  if (existing && existing !== orderId) {
+  if (existing === orderId) return { acquired: false, sameOrder: true };
+  if (existing) {
     const queueKey = `order_queue_${clientId}`;
     const raw = await env.CLIENTS.get(queueKey);
     const queue = raw ? JSON.parse(raw) : [];
     queue.push(orderId);
     await env.CLIENTS.put(queueKey, JSON.stringify(queue));
-    return false;
+    return { acquired: false };
   }
-  // TTL 300s safety net — auto-unlock if stuck
   await env.CLIENTS.put(lockKey, orderId, { expirationTtl: 300 });
-  return true;
+  return { acquired: true };
 }
 
 async function releaseOrderLock(env, clientId, workerUrl) {
@@ -2085,7 +2132,8 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
   const orderId = `${chatId}_${data.timestamp || Date.now()}`;
 
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
-  if (!lockAcquired) {
+  if (lockAcquired.sameOrder) return;
+  if (!lockAcquired.acquired) {
     await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
       type: 'order', orderId, orderData, items, dest, isWhite, workerUrl
     }));
@@ -2180,7 +2228,8 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
   await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
 
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
-  if (!lockAcquired) {
+  if (lockAcquired.sameOrder) return;
+  if (!lockAcquired.acquired) {
     await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
       type: 'search', orderId, orderNumber, items, dest, clientId: chatId, header, workerUrl
     }));
