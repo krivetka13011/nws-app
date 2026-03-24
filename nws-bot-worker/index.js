@@ -732,6 +732,25 @@ export default {
       });
     }
 
+    // GET /health?secret=WEBHOOK_SECRET — getMe + проверка токена (диагностика «бот молчит»)
+    if (request.method === 'GET' && url.pathname === '/health') {
+      const secret = url.searchParams.get('secret');
+      if (secret !== env.WEBHOOK_SECRET) return jsonResponse({ ok: false }, 403);
+      if (!env.BOT_TOKEN) {
+        return jsonResponse({ ok: false, error: 'BOT_TOKEN not set in Worker' }, 500);
+      }
+      const me = await callTelegram(env, 'getMe', {});
+      const hook = await callTelegram(env, 'getWebhookInfo', {});
+      return jsonResponse({
+        ok: true,
+        bot: me.ok ? me.result : null,
+        telegram_getMe_ok: me.ok,
+        webhook: hook.ok ? hook.result : null,
+        hasClientsKv: !!env.CLIENTS,
+        groupId: env.GROUP_ID || null
+      });
+    }
+
     // Webhook: /webhook/<WEBHOOK_SECRET>
     if (
       request.method === 'POST' &&
@@ -1842,12 +1861,41 @@ async function handleDeliveryCommand(env, msg, threadId) {
 
 // ===== Update router =====
 
+/**
+ * Дедупликация: ключ в KV пишем только ПОСЛЕ успешной обработки.
+ * Иначе при сбое после put() повтор апдейта от Telegram видит «уже обработано» и молчит — бот «умирает».
+ */
 async function handleUpdate(update, env, workerUrl) {
+  if (!update) return;
+
   if (update.update_id != null && env.CLIENTS) {
-    const ukey = `tgupd_${update.update_id}`;
-    const seen = await env.CLIENTS.get(ukey);
-    if (seen) return;
-    await env.CLIENTS.put(ukey, '1', { expirationTtl: 86400 });
+    try {
+      const ukey = `tgupd_${update.update_id}`;
+      if (await env.CLIENTS.get(ukey)) return;
+    } catch (e) {
+      console.error('tg dedupe read:', e);
+    }
+  }
+
+  try {
+    await dispatchTelegramUpdate(update, env, workerUrl);
+  } catch (e) {
+    console.error('dispatchTelegramUpdate:', e);
+    throw e;
+  }
+
+  if (update.update_id != null && env.CLIENTS) {
+    try {
+      await env.CLIENTS.put(`tgupd_${update.update_id}`, '1', { expirationTtl: 86400 });
+    } catch (e) {
+      console.error('tg dedupe put:', e);
+    }
+  }
+}
+
+async function dispatchTelegramUpdate(update, env, workerUrl) {
+  if (!env.BOT_TOKEN) {
+    throw new Error('BOT_TOKEN отсутствует: задайте секрет BOT_TOKEN в Cloudflare Workers → Settings → Variables');
   }
 
   // Обработка нажатий на inline-кнопки
