@@ -477,23 +477,23 @@
         <div class="sheet-content" onclick="event.stopPropagation()">
             <div class="sheet-handle" onclick="closeBoxSheet()"></div>
             <h3 class="text-xl font-bold mb-6 px-2 text-white">Выберите размер</h3>
-            <div class="sheet-option" onclick="selectBox('Mini', 679, 'Вещи (футболка, сумка, ремень, носки)')">
+            <div class="sheet-option" onclick="selectBox('Mini', 679, 'Вещи (футболка, сумка, ремень, носки)', this)">
                 <div class="flex flex-col"><span class="text-lg font-medium text-white">Mini</span><span class="text-sm text-[var(--text-secondary)] mt-1">23x17x13 см, до 0.6 кг</span></div>
                 <span class="text-blue-400 font-bold text-lg">679 ₽</span>
             </div>
-            <div class="sheet-option" onclick="selectBox('Small', 1562, 'Пара обуви в коробке')">
+            <div class="sheet-option" onclick="selectBox('Small', 1562, 'Пара обуви в коробке', this)">
                  <div class="flex flex-col"><span class="text-lg font-medium text-white">Small</span><span class="text-sm text-[var(--text-secondary)] mt-1">36x26x14 см, до 1.5 кг</span></div>
                 <span class="text-blue-400 font-bold text-lg">1 562 ₽</span>
             </div>
-            <div class="sheet-option" onclick="selectBox('Large', 2411, 'Пара обуви в коробке + несколько вещей')">
+            <div class="sheet-option" onclick="selectBox('Large', 2411, 'Пара обуви в коробке + несколько вещей', this)">
                  <div class="flex flex-col"><span class="text-lg font-medium text-white">Large</span><span class="text-sm text-[var(--text-secondary)] mt-1">40x29x16 см, до 2.5 кг</span></div>
                 <span class="text-blue-400 font-bold text-lg">2 411 ₽</span>
             </div>
-            <div class="sheet-option" onclick="selectBox('X-Large', 3489, 'Две пары обуви в коробке + несколько вещей')">
+            <div class="sheet-option" onclick="selectBox('X-Large', 3489, 'Две пары обуви в коробке + несколько вещей', this)">
                  <div class="flex flex-col"><span class="text-lg font-medium text-white">X-Large</span><span class="text-sm text-[var(--text-secondary)] mt-1">37x29x28 см, до 3.5 кг</span></div>
                 <span class="text-blue-400 font-bold text-lg">3 489 ₽</span>
             </div>
-            <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
+            <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу', this)">
                 <span class="text-lg text-white">Свой размер</span>
                 <span class="text-[var(--text-secondary)] text-sm">Калькулятор</span>
             </div>
@@ -534,16 +534,46 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.setHeaderColor('#050505');
-        tg.setBackgroundColor('#050505');
+        const tg = window.Telegram && window.Telegram.WebApp;
+        if (tg) {
+            try {
+                tg.ready();
+                tg.expand();
+                tg.setHeaderColor('#050505');
+                tg.setBackgroundColor('#050505');
+            } catch (e) { console.warn('Telegram WebApp init:', e); }
+        }
+
+        function sendWebAppData(payload) {
+            const str = typeof payload === 'string' ? payload : JSON.stringify(payload);
+            const w = window.Telegram && window.Telegram.WebApp;
+            if (!w || typeof w.sendData !== 'function') {
+                alert('Откройте мини-приложение из Telegram (кнопка «Приложение» в боте), иначе отправка в чат недоступна.');
+                return false;
+            }
+            try {
+                w.sendData(str);
+                return true;
+            } catch (e) {
+                alert('Ошибка отправки в бот: ' + (e && e.message ? e.message : e));
+                return false;
+            }
+        }
+
+        function closeMiniApp() {
+            try {
+                const w = window.Telegram && window.Telegram.WebApp;
+                if (w && typeof w.close === 'function') w.close();
+            } catch (_) {}
+        }
         const RATE_MULTIPLIER = 13; 
         const ORDER_HELP_URL = 'https://telegra.ph/Kak-pravilno-oformlyat-zakazy-03-03'; 
         const WORKER_URL = 'https://nwsnumbot.krivetkagames.workers.dev';
         const ORDER_STATUS_URL = `${WORKER_URL}/order-status`;
         const ORDERS_URL = `${WORKER_URL}/orders`;
-        
+        const MAX_PHOTOS_PER_ITEM = 3;
+        const UPLOAD_DELAY_MS = 150;
+
         let currentTab = 'calc';
         let orderItems = [];
         let searchItems = [];
@@ -557,7 +587,7 @@
         const USER_ID_KEY = 'nws_user_id';
 
         function getHistoryUserId() {
-            const tgId = tg.initDataUnsafe?.user?.id;
+            const tgId = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || undefined;
             if (tgId) {
                 try { localStorage.setItem(USER_ID_KEY, String(tgId)); } catch (_) {}
                 return tgId;
@@ -839,13 +869,13 @@
             updateCalc();
         }
 
-        function selectBox(type, price, desc) {
+        function selectBox(type, price, desc, rowEl) {
             currentBox.type = type; currentBox.price = price;
             const triggerText = document.getElementById('selectedBoxName');
             const descEl = document.getElementById('boxDesc');
             const customDiv = document.getElementById('customDims');
             document.querySelectorAll('.sheet-option').forEach(el => el.classList.remove('selected'));
-            event.currentTarget.classList.add('selected');
+            if (rowEl && rowEl.classList) rowEl.classList.add('selected');
             if (type === 'custom') {
                 triggerText.innerText = "Свой размер";
                 descEl.classList.add('hidden'); // Hide for custom
@@ -904,7 +934,7 @@
                     data.boxName = `Коробка ${currentBox.type}`;
                     data.l = currentBox.l; data.w = currentBox.w; data.h = currentBox.h;
                 }
-                tg.sendData(JSON.stringify(data));
+                sendWebAppData(data);
             } catch (e) { alert("Ошибка: " + e.message); }
         }
 
@@ -988,9 +1018,9 @@
 
                 // Use API path for full photo support
                 const apiBody = {
-                    userId, username: tg.initDataUnsafe?.user?.username || '',
-                    firstName: tg.initDataUnsafe?.user?.first_name || '',
-                    lastName: tg.initDataUnsafe?.user?.last_name || '',
+                    userId, username: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username) || '',
+                    firstName: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || '',
+                    lastName: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.last_name) || '',
                     items: orderItems.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, imgUrls: (i.imgUrls || []).slice(0, MAX_PHOTOS_PER_ITEM) })),
                     deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
                     timestamp: orderTs
@@ -1013,7 +1043,7 @@
                             pollContinueOrder(result.orderId);
                         }
                         if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
-                        setTimeout(() => tg.close(), 800);
+                        setTimeout(() => closeMiniApp(), 800);
                     }
                 } catch (apiErr) {
                     console.error('API error, fallback to sendData:', apiErr);
@@ -1033,7 +1063,7 @@
                         json = JSON.stringify(data);
                         if (json.length > 4000) { data.items = data.items.map(i => ({ ...i, imgUrls: [] })); json = JSON.stringify(data); }
                     }
-                    tg.sendData(json);
+                    sendWebAppData(json);
                     if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
                 }
             } catch (e) {
@@ -1080,9 +1110,6 @@
             const buttons = document.querySelectorAll(`#${containerId} .delete-btn`);
             buttons.forEach(btn => { btn.style.display = list.length > 1 ? 'block' : 'none'; });
         }
-
-        const MAX_PHOTOS_PER_ITEM = 9;
-        const UPLOAD_DELAY_MS = 150;
 
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -1153,7 +1180,7 @@
 
                 const userId = getHistoryUserId() || 0;
                 const itemsForApi = searchItems.map(i => ({
-                    link: i.link, comment: i.comment, imgUrls: (i.imgUrls || []).slice(0, 9),
+                    link: i.link, comment: i.comment, imgUrls: (i.imgUrls || []).slice(0, MAX_PHOTOS_PER_ITEM),
                     imgDeleteUrls: (i.imgDeleteUrls || []).slice(0, (i.imgUrls || []).length)
                 }));
                 let apiOk = false;
@@ -1163,9 +1190,9 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             userId,
-                            username: tg.initDataUnsafe?.user?.username || '',
-                            firstName: tg.initDataUnsafe?.user?.first_name || '',
-                            lastName: tg.initDataUnsafe?.user?.last_name || '',
+                            username: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username) || '',
+                            firstName: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || '',
+                            lastName: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.last_name) || '',
                             items: itemsForApi
                         })
                     });
@@ -1178,7 +1205,7 @@
                             delivery: 'Поиск', price: '', itemsData: searchItems.map(i => ({ ...i, imgDeleteUrls: i.imgDeleteUrls || [] })),
                             images: historyImages, orderId: data.orderId, orderNumber: data.orderNumber
                         });
-                        tg.close();
+                        closeMiniApp();
                         return;
                     }
                 } catch (_) {}
@@ -1191,7 +1218,7 @@
                     let payload = { type: 'search', items: searchItems };
                     let json = JSON.stringify(payload);
                     if (json.length > 3500) payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
-                    tg.sendData(JSON.stringify(payload));
+                    sendWebAppData(payload);
                 }
             } catch (e) { alert("Ошибка: " + e.message); }
         }
