@@ -17,6 +17,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: nws-bot-worker
+          wranglerVersion: "4.71.0"
           command: deploy
 
       - name: Notify deploy success
