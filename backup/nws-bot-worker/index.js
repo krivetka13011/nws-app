@@ -13,6 +13,27 @@ function jsonResponse(body, status = 200) {
   });
 }
 
+function isKvWriteLimitError(e) {
+  const s = String(e && (e.message || e) || '');
+  return /KV put\(\)|limit exceeded for the day/i.test(s);
+}
+
+/** put в CLIENTS; при суточном лимите KV — не бросает, возвращает false (сообщения в Telegram всё равно можно отправить). */
+async function kvPut(env, key, value, opts) {
+  if (!env.CLIENTS) return false;
+  try {
+    if (opts !== undefined) await env.CLIENTS.put(key, value, opts);
+    else await env.CLIENTS.put(key, value);
+    return true;
+  } catch (e) {
+    if (isKvWriteLimitError(e)) {
+      console.warn('kvPut skipped (quota):', key);
+      return false;
+    }
+    throw e;
+  }
+}
+
 /** Список ключей ImgBB: IMGBB_KEYS (через запятую/пробел) или один IMGBB_KEY */
 function parseImgbbKeys(env) {
   const raw = env.IMGBB_KEYS;
@@ -1172,7 +1193,7 @@ async function finishOrder(env, job) {
 
   if (clientStatusSent?.result?.message_id) {
     orderData.clientStatusMsgId = clientStatusSent.result.message_id;
-    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
+    await kvPut(env, `order_${orderId}`, JSON.stringify(orderData));
   }
 }
 
@@ -1197,27 +1218,54 @@ function releaseItemsLock(env, lockKey) {
 // ===== Order queue: per-client lock =====
 
 async function acquireOrderLock(env, clientId, orderId) {
-  const lockKey = `order_lock_${clientId}`;
-  const existing = await env.CLIENTS.get(lockKey);
-  if (existing && existing !== orderId) {
-    const queueKey = `order_queue_${clientId}`;
-    const raw = await env.CLIENTS.get(queueKey);
-    const queue = raw ? JSON.parse(raw) : [];
-    queue.push(orderId);
-    await env.CLIENTS.put(queueKey, JSON.stringify(queue));
-    return false;
+  if (!env.CLIENTS) return true;
+  try {
+    const lockKey = `order_lock_${clientId}`;
+    const existing = await env.CLIENTS.get(lockKey);
+    if (existing && existing !== orderId) {
+      const queueKey = `order_queue_${clientId}`;
+      const raw = await env.CLIENTS.get(queueKey);
+      const queue = raw ? JSON.parse(raw) : [];
+      queue.push(orderId);
+      const ok = await kvPut(env, queueKey, JSON.stringify(queue));
+      if (!ok) {
+        console.warn('acquireOrderLock: queue KV full, processing without queue');
+        return true;
+      }
+      return false;
+    }
+    const ok = await kvPut(env, lockKey, orderId, { expirationTtl: 300 });
+    if (!ok) {
+      console.warn('acquireOrderLock: lock KV full, proceeding unlocked');
+      return true;
+    }
+    return true;
+  } catch (e) {
+    if (isKvWriteLimitError(e)) {
+      console.warn('acquireOrderLock: quota, proceeding unlocked');
+      return true;
+    }
+    throw e;
   }
-  // TTL 300s safety net — auto-unlock if stuck
-  await env.CLIENTS.put(lockKey, orderId, { expirationTtl: 300 });
-  return true;
 }
 
 async function releaseOrderLock(env, clientId, workerUrl) {
+  if (!env.CLIENTS) return;
   const lockKey = `order_lock_${clientId}`;
-  await env.CLIENTS.delete(lockKey);
+  try {
+    await env.CLIENTS.delete(lockKey);
+  } catch (e) {
+    if (!isKvWriteLimitError(e)) console.error('releaseOrderLock delete lock', e);
+  }
 
   const queueKey = `order_queue_${clientId}`;
-  const raw = await env.CLIENTS.get(queueKey);
+  let raw;
+  try {
+    raw = await env.CLIENTS.get(queueKey);
+  } catch (e) {
+    if (!isKvWriteLimitError(e)) console.error('releaseOrderLock get queue', e);
+    return;
+  }
   if (!raw) return;
 
   const queue = JSON.parse(raw);
@@ -1225,9 +1273,13 @@ async function releaseOrderLock(env, clientId, workerUrl) {
 
   const nextOrderId = queue.shift();
   if (queue.length) {
-    await env.CLIENTS.put(queueKey, JSON.stringify(queue));
+    await kvPut(env, queueKey, JSON.stringify(queue));
   } else {
-    await env.CLIENTS.delete(queueKey);
+    try {
+      await env.CLIENTS.delete(queueKey);
+    } catch (e) {
+      if (!isKvWriteLimitError(e)) console.error('releaseOrderLock delete queue', e);
+    }
   }
 
   // Запускаем следующий заказ из очереди
@@ -1235,9 +1287,13 @@ async function releaseOrderLock(env, clientId, workerUrl) {
   if (!jobRaw) return;
 
   const job = JSON.parse(jobRaw);
-  await env.CLIENTS.delete(`pending_job_${nextOrderId}`);
+  try {
+    await env.CLIENTS.delete(`pending_job_${nextOrderId}`);
+  } catch (e) {
+    if (!isKvWriteLimitError(e)) console.error('releaseOrderLock delete pending_job', e);
+  }
 
-  await env.CLIENTS.put(`order_lock_${clientId}`, nextOrderId, { expirationTtl: 300 });
+  await kvPut(env, `order_lock_${clientId}`, nextOrderId, { expirationTtl: 300 });
 
   if (job.type === 'order') {
     const { orderId, orderData, items, dest, isWhite } = job;
@@ -1275,8 +1331,8 @@ async function releaseOrderLock(env, clientId, workerUrl) {
       }
     }
     orderData.messageIds = orderMsgIds;
-    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
-    await env.CLIENTS.put(`order_by_num_${orderData.orderNumber}`, orderId);
+    await kvPut(env, `order_${orderId}`, JSON.stringify(orderData));
+    await kvPut(env, `order_by_num_${orderData.orderNumber}`, orderId);
 
     try {
       await finishOrder(env, { clientId, orderNumber: orderData.orderNumber, orderId, dest });
@@ -1300,12 +1356,12 @@ async function releaseOrderLock(env, clientId, workerUrl) {
       }
     }
 
-    await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+    await kvPut(env, `search_meta_${orderId}`, JSON.stringify({
       headerMsgId: searchMsgIds[0],
       messageIds: searchMsgIds,
       dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
     }));
-    if (job.orderNumber) await env.CLIENTS.put(`order_by_num_${job.orderNumber}`, orderId);
+    if (job.orderNumber) await kvPut(env, `order_by_num_${job.orderNumber}`, orderId);
 
     await sendWithRetry(env, 'sendMessage', {
       chat_id: clientId,
@@ -1393,8 +1449,8 @@ async function getOrCreateTopicCore(env, clientChatId, from) {
     console.error('createForumTopic returned General topic id:', topicId);
     return { topicId: null, created: false };
   }
-  await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
-  await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
+  await kvPut(env, key, JSON.stringify({ topicId, name }));
+  await kvPut(env, `topic_${topicId}`, String(clientChatId));
   return { topicId, created: true };
 }
 
@@ -1454,8 +1510,8 @@ async function invalidateAndRecreateCore(env, clientChatId, from) {
   if (!res.ok || !res.result) return null;
   const topicId = res.result.message_thread_id;
   if (isGeneralTopic(env, topicId)) return null;
-  await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
-  await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
+  await kvPut(env, key, JSON.stringify({ topicId, name }));
+  await kvPut(env, `topic_${topicId}`, String(clientChatId));
   return topicId;
 }
 
@@ -1534,7 +1590,7 @@ async function addToBroadcastList(env, chatId) {
   const id = Number(chatId);
   if (!list.includes(id)) {
     list.push(id);
-    await env.CLIENTS.put(key, JSON.stringify(list));
+    await kvPut(env, key, JSON.stringify(list));
   }
 }
 
@@ -2375,10 +2431,11 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
 
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
   if (!lockAcquired) {
-    await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+    const queued = await kvPut(env, `pending_job_${orderId}`, JSON.stringify({
       type: 'order', orderId, orderData, items, dest, isWhite, workerUrl
     }));
-    return;
+    if (queued) return;
+    console.warn('handleOrder: pending_job not saved (KV quota), processing inline');
   }
 
   const statusText = buildOrderStatus(orderData);
@@ -2415,10 +2472,8 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
     }
   }
 
-  if (env.CLIENTS) {
-    await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(orderData));
-    await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
-  }
+  await kvPut(env, `order_${orderId}`, JSON.stringify(orderData));
+  await kvPut(env, `order_by_num_${orderNumber}`, orderId);
 
   await addToBroadcastList(env, chatId);
 
@@ -2466,14 +2521,15 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     `  📦  Позиций: ${items.length}`;
 
   const orderId = `search_${chatId}_${Date.now()}`;
-  await env.CLIENTS.put(`order_by_num_${orderNumber}`, orderId);
+  await kvPut(env, `order_by_num_${orderNumber}`, orderId);
 
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
   if (!lockAcquired) {
-    await env.CLIENTS.put(`pending_job_${orderId}`, JSON.stringify({
+    const queued = await kvPut(env, `pending_job_${orderId}`, JSON.stringify({
       type: 'search', orderId, orderNumber, items, dest, clientId: chatId, header, workerUrl
     }));
-    return;
+    if (queued) return;
+    console.warn('handleSearch: pending_job not saved (KV quota), processing inline');
   }
 
   const searchMsgIds = [];
@@ -2502,7 +2558,7 @@ async function handleSearch(env, chatId, user, data, workerUrl) {
     }
   }
 
-  await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+  await kvPut(env, `search_meta_${orderId}`, JSON.stringify({
     headerMsgId: searchMsgIds[0],
     messageIds: searchMsgIds,
     dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
