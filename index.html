@@ -673,7 +673,7 @@
         }
 
         async function pollContinueOrder(orderId) {
-            for (let i = 0; i < 60; i++) {
+            for (let i = 0; i < 30; i++) {
                 try {
                     const res = await fetch(`${WORKER_URL}/api/continue-order`, {
                         method: 'POST',
@@ -682,9 +682,9 @@
                     });
                     const data = await res.json();
                     if (data.done) return;
-                    if (data.busy) { await sleep(500); continue; }
+                    if (data.busy) { await sleep(800); continue; }
                 } catch (_) {}
-                await sleep(1500);
+                await sleep(2000);
             }
         }
 
