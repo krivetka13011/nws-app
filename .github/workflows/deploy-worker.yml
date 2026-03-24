@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'nws-bot-worker/**'
+      - '.github/workflows/deploy-worker.yml'
   workflow_dispatch:
 
 jobs:
