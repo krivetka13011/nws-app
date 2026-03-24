@@ -309,7 +309,7 @@ export default {
 
         const job = JSON.parse(raw);
         const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-        const ITEMS_PER_CALL = 4;
+        const ITEMS_PER_CALL = 8;
         const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
 
         const msgIds = [];
@@ -334,31 +334,38 @@ export default {
         }
 
         if (job.type === 'order' && msgIds.length > 0) {
-          const raw = await env.CLIENTS.get(`order_${orderId}`);
-          if (raw) {
-            const od = JSON.parse(raw);
-            od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(msgIds);
-            await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
-          }
+          job.orderMsgIdsAccum = (job.orderMsgIdsAccum || []).concat(msgIds);
         } else if (job.type === 'search' && msgIds.length > 0) {
-          const metaRaw = await env.CLIENTS.get(`search_meta_${orderId}`);
-          if (metaRaw) {
-            const meta = JSON.parse(metaRaw);
-            meta.messageIds = (meta.messageIds || []).concat(msgIds);
-            await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify(meta));
-          } else {
-            await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
-              headerMsgId: msgIds[0],
-              messageIds: msgIds,
-              dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
-            }));
-          }
+          job.searchMsgIdsAccum = (job.searchMsgIdsAccum || []).concat(msgIds);
         }
 
         if (end < items.length) {
           job.nextIdx = end;
           await env.CLIENTS.put(`pending_items_${orderId}`, JSON.stringify(job));
           return jsonResponse({ ok: true, done: false, processed: end, total: items.length });
+        }
+
+        if (job.type === 'order' && (job.orderMsgIdsAccum || []).length > 0) {
+          const rawOd = await env.CLIENTS.get(`order_${orderId}`);
+          if (rawOd) {
+            const od = JSON.parse(rawOd);
+            od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(job.orderMsgIdsAccum);
+            await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
+          }
+        } else if (job.type === 'search' && (job.searchMsgIdsAccum || []).length > 0) {
+          const metaRaw = await env.CLIENTS.get(`search_meta_${orderId}`);
+          if (metaRaw) {
+            const meta = JSON.parse(metaRaw);
+            meta.messageIds = (meta.messageIds || []).concat(job.searchMsgIdsAccum);
+            await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify(meta));
+          } else {
+            const acc = job.searchMsgIdsAccum;
+            await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify({
+              headerMsgId: acc[0],
+              messageIds: acc,
+              dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id }
+            }));
+          }
         }
 
         // All items done
@@ -832,66 +839,58 @@ async function processPendingOrdersCron(env) {
       if (!raw) return;
       const job = JSON.parse(raw);
       const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-      const ITEMS_PER_CALL = 4;
+      const ITEMS_PER_CALL = 8;
       const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
       const msgIds = [];
 
       for (let idx = nextIdx; idx < end; idx++) {
-      if (idx > nextIdx) await sleep(500);
-      let lastErr;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          if (job.type === 'order') {
-            await sendOrderItem(env, items[idx], idx, dest, isWhite, msgIds);
-          } else {
-            await sendSearchItem(env, items[idx], idx, dest, msgIds);
+        if (idx > nextIdx) await sleep(500);
+        let lastErr;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            if (job.type === 'order') {
+              await sendOrderItem(env, items[idx], idx, dest, isWhite, msgIds);
+            } else {
+              await sendSearchItem(env, items[idx], idx, dest, msgIds);
+            }
+            lastErr = null;
+            break;
+          } catch (e) {
+            lastErr = e;
+            console.error('cron item', idx, 'attempt', attempt + 1, e);
+            if (attempt < 2) await sleep(2000);
           }
-          lastErr = null;
-          break;
-        } catch (e) {
-          lastErr = e;
-          console.error('cron item', idx, 'attempt', attempt + 1, e);
-          if (attempt < 2) await sleep(2000);
         }
       }
-    }
 
-    if (end < items.length) {
-      job.nextIdx = end;
       if (job.type === 'order' && msgIds.length > 0) {
+        job.orderMsgIdsAccum = (job.orderMsgIdsAccum || []).concat(msgIds);
+      } else if (job.type === 'search' && msgIds.length > 0) {
+        job.searchMsgIdsAccum = (job.searchMsgIdsAccum || []).concat(msgIds);
+      }
+
+      if (end < items.length) {
+        job.nextIdx = end;
+        await env.CLIENTS.put(key, JSON.stringify(job));
+        return;
+      }
+
+      if (job.type === 'order' && (job.orderMsgIdsAccum || []).length > 0) {
         const orderRaw = await env.CLIENTS.get(`order_${orderId}`);
         if (orderRaw) {
           const od = JSON.parse(orderRaw);
-          od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(msgIds);
+          od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(job.orderMsgIdsAccum);
           await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
         }
-      } else if (job.type === 'search' && msgIds.length > 0) {
+      } else if (job.type === 'search' && (job.searchMsgIdsAccum || []).length > 0) {
         const metaRaw = await env.CLIENTS.get(`search_meta_${orderId}`);
         const meta = metaRaw ? JSON.parse(metaRaw) : { dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id } };
-        meta.messageIds = (meta.messageIds || []).concat(msgIds);
+        meta.messageIds = (meta.messageIds || []).concat(job.searchMsgIdsAccum);
         if (!meta.headerMsgId && meta.messageIds.length) meta.headerMsgId = meta.messageIds[0];
         await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify(meta));
       }
-      await env.CLIENTS.put(key, JSON.stringify(job));
-      return;
-    }
 
-    if (job.type === 'order' && msgIds.length > 0) {
-      const orderRaw = await env.CLIENTS.get(`order_${orderId}`);
-      if (orderRaw) {
-        const od = JSON.parse(orderRaw);
-        od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(msgIds);
-        await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
-      }
-    } else if (job.type === 'search' && msgIds.length > 0) {
-      const metaRaw = await env.CLIENTS.get(`search_meta_${orderId}`);
-      const meta = metaRaw ? JSON.parse(metaRaw) : { dest: { chat_id: dest.chat_id, message_thread_id: dest.message_thread_id } };
-      meta.messageIds = (meta.messageIds || []).concat(msgIds);
-      if (!meta.headerMsgId && meta.messageIds.length) meta.headerMsgId = meta.messageIds[0];
-      await env.CLIENTS.put(`search_meta_${orderId}`, JSON.stringify(meta));
-    }
-
-    await env.CLIENTS.delete(key);
+      await env.CLIENTS.delete(key);
     try {
       if (job.type === 'order') {
         await finishOrder(env, job);
@@ -1127,6 +1126,8 @@ async function finishOrder(env, job) {
 
 async function acquireItemsLock(env, orderId) {
   const lockKey = `items_lock_${orderId}`;
+  const busy = await env.CLIENTS.get(lockKey);
+  if (busy) return null;
   const ourId = crypto.randomUUID();
   await env.CLIENTS.put(lockKey, ourId, { expirationTtl: 120 });
   await sleep(200);
