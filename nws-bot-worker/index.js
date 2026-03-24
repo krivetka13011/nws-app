@@ -722,6 +722,16 @@ export default {
       });
     }
 
+    // GET /webhook-info?secret=WEBHOOK_SECRET — куда указывает вебхук (диагностика)
+    if (request.method === 'GET' && url.pathname === '/webhook-info') {
+      const secret = url.searchParams.get('secret');
+      if (secret !== env.WEBHOOK_SECRET) return jsonResponse({ ok: false }, 403);
+      const res = await callTelegram(env, 'getWebhookInfo', {});
+      return new Response(JSON.stringify(res, null, 2), {
+        status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+      });
+    }
+
     // Webhook: /webhook/<WEBHOOK_SECRET>
     if (
       request.method === 'POST' &&
@@ -1270,21 +1280,36 @@ async function getOrCreateTopicCore(env, clientChatId, from) {
   return { topicId, created: true };
 }
 
+const TOPIC_DO_TIMEOUT_MS = 12000;
+
 async function getOrCreateTopic(env, clientChatId, from) {
   if (!getGroupId(env) || !env.CLIENTS) return { topicId: null, created: false };
   if (env.TOPIC_COORD) {
     try {
       const id = env.TOPIC_COORD.idFromName(`c_${clientChatId}`);
       const stub = env.TOPIC_COORD.get(id);
-      const res = await stub.fetch('https://topic-coord/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ op: 'getOrCreate', clientChatId, from })
-      });
-      const data = await res.json();
-      if (data && typeof data.topicId !== 'undefined') return data;
+      const ac = new AbortController();
+      const tid = setTimeout(() => ac.abort(), TOPIC_DO_TIMEOUT_MS);
+      let res;
+      try {
+        res = await stub.fetch('https://topic-coord/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'getOrCreate', clientChatId, from }),
+          signal: ac.signal
+        });
+      } finally {
+        clearTimeout(tid);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && typeof data.topicId !== 'undefined') return data;
     } catch (e) {
-      console.error('getOrCreateTopic TOPIC_COORD:', e);
+      const name = e && e.name;
+      if (name === 'AbortError') {
+        console.error('getOrCreateTopic TOPIC_COORD: timeout, using KV path');
+      } else {
+        console.error('getOrCreateTopic TOPIC_COORD:', e);
+      }
     }
   }
   return getOrCreateTopicCore(env, clientChatId, from);
@@ -1323,15 +1348,27 @@ async function invalidateAndRecreateTopic(env, clientChatId, from) {
     try {
       const id = env.TOPIC_COORD.idFromName(`c_${clientChatId}`);
       const stub = env.TOPIC_COORD.get(id);
-      const res = await stub.fetch('https://topic-coord/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ op: 'invalidate', clientChatId, from })
-      });
-      const data = await res.json();
-      if (data && Object.prototype.hasOwnProperty.call(data, 'topicId')) return data.topicId;
+      const ac = new AbortController();
+      const tid = setTimeout(() => ac.abort(), TOPIC_DO_TIMEOUT_MS);
+      let res;
+      try {
+        res = await stub.fetch('https://topic-coord/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'invalidate', clientChatId, from }),
+          signal: ac.signal
+        });
+      } finally {
+        clearTimeout(tid);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && Object.prototype.hasOwnProperty.call(data, 'topicId')) return data.topicId;
     } catch (e) {
-      console.error('invalidateAndRecreateTopic TOPIC_COORD:', e);
+      if (e && e.name === 'AbortError') {
+        console.error('invalidateAndRecreateTopic TOPIC_COORD: timeout');
+      } else {
+        console.error('invalidateAndRecreateTopic TOPIC_COORD:', e);
+      }
     }
   }
   return invalidateAndRecreateCore(env, clientChatId, from);
@@ -1822,8 +1859,8 @@ async function handleUpdate(update, env, workerUrl) {
   const msg = update.message;
   if (!msg) return;
 
-  // Удаляем системные уведомления о закреплённых сообщениях
-  if (msg.pinned_message) {
+  // Сервисное «закреплено» без текста — удаляем; /start с текстом не отбрасываем
+  if (msg.pinned_message && !msg.text) {
     await callTelegram(env, 'deleteMessage', {
       chat_id: msg.chat.id,
       message_id: msg.message_id
@@ -2026,32 +2063,13 @@ async function forwardManagerReplyToClient(env, msg, clientId) {
 
 // ===== Handlers =====
 
-async function handleStart(env, chatId, from) {
-  let { topicId } = await getOrCreateTopic(env, chatId, from);
-  if (topicId && !isGeneralTopic(env, topicId)) {
-    const ping = await callTelegram(env, 'sendMessage', {
-      chat_id: getGroupId(env),
-      message_thread_id: topicId,
-      text: '\u200B'
-    });
-    const badTopic = (ping && !ping.ok && isThreadNotFound(ping)) || (ping?.ok && sentToGeneral(ping, topicId));
-    if (badTopic) {
-      if (ping?.ok && ping.result?.message_id) {
-        await callTelegram(env, 'deleteMessage', {
-          chat_id: getGroupId(env),
-          message_id: ping.result.message_id
-        });
-      }
-      const newTopicId = await invalidateAndRecreateTopic(env, chatId, from);
-      if (newTopicId) topicId = newTopicId;
-    } else if (ping?.ok && ping.result?.message_id) {
-      await callTelegram(env, 'deleteMessage', {
-        chat_id: getGroupId(env),
-        message_id: ping.result.message_id
-      });
-    }
-  }
+function miniAppBaseUrl(env) {
+  const u = typeof env.APP_URL === 'string' ? env.APP_URL.trim() : '';
+  if (u) return u.replace(/\/$/, '');
+  return 'https://krivetka13011.github.io/nws-app';
+}
 
+async function handleStart(env, chatId, from) {
   const text =
     '🌊  Приветствуем в NWS LOGISTICS!\n\n' +
     ' ⬇️  Используйте кнопку ниже чтобы открыть приложение.\n\n' +
@@ -2062,9 +2080,8 @@ async function handleStart(env, chatId, from) {
     '👤 Вопросы, чеки оплаты отправляйте в чат бота❗️\n\n' +
     '🔗 Для быстрой работы бота используйте VPN';
 
-  const appUrl = env.APP_URL.includes('?')
-    ? `${env.APP_URL}&uid=${chatId}`
-    : `${env.APP_URL}?uid=${chatId}`;
+  const base = miniAppBaseUrl(env);
+  const appUrl = base.includes('?') ? `${base}&uid=${chatId}` : `${base}?uid=${chatId}`;
 
   const keyboard = {
     keyboard: [
@@ -2085,12 +2102,48 @@ async function handleStart(env, chatId, from) {
       reply_markup: keyboard
     });
   } catch (e) {
-    console.error('handleStart welcome sendWithRetry:', e);
-    await callTelegram(env, 'sendMessage', {
-      chat_id: chatId,
-      text,
-      reply_markup: keyboard
-    });
+    console.error('handleStart welcome with keyboard:', e);
+    try {
+      await sendWithRetry(env, 'sendMessage', {
+        chat_id: chatId,
+        text: `${text}\n\n🔗 Откройте приложение: ${appUrl}`
+      });
+    } catch (e2) {
+      console.error('handleStart welcome plain:', e2);
+      await callTelegram(env, 'sendMessage', {
+        chat_id: chatId,
+        text: 'NWS LOGISTICS: откройте мини-приложение по ссылке из профиля бота или напишите менеджеру.'
+      });
+    }
+  }
+
+  try {
+    let { topicId } = await getOrCreateTopic(env, chatId, from);
+    if (topicId && !isGeneralTopic(env, topicId)) {
+      const ping = await callTelegram(env, 'sendMessage', {
+        chat_id: getGroupId(env),
+        message_thread_id: topicId,
+        text: '\u200B'
+      });
+      const badTopic = (ping && !ping.ok && isThreadNotFound(ping)) || (ping?.ok && sentToGeneral(ping, topicId));
+      if (badTopic) {
+        if (ping?.ok && ping.result?.message_id) {
+          await callTelegram(env, 'deleteMessage', {
+            chat_id: getGroupId(env),
+            message_id: ping.result.message_id
+          });
+        }
+        const newTopicId = await invalidateAndRecreateTopic(env, chatId, from);
+        if (newTopicId) topicId = newTopicId;
+      } else if (ping?.ok && ping.result?.message_id) {
+        await callTelegram(env, 'deleteMessage', {
+          chat_id: getGroupId(env),
+          message_id: ping.result.message_id
+        });
+      }
+    }
+  } catch (e) {
+    console.error('handleStart topic/CRM:', e);
   }
 
   await addToBroadcastList(env, chatId);
