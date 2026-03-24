@@ -577,6 +577,8 @@
         let currentTab = 'calc';
         let orderItems = [];
         let searchItems = [];
+        let orderSubmitInFlight = false;
+        let searchSubmitInFlight = false;
         let deliveryType = 'grey'; 
         let historyDataCache = [];
         let lastOrdersCache = [];
@@ -969,6 +971,8 @@
         }
 
         async function sendOrder() {
+            if (orderSubmitInFlight) return;
+            orderSubmitInFlight = true;
             try {
                 if (orderItems.length === 0) return alert("Пустой заказ!");
 
@@ -1051,6 +1055,8 @@
                 const btn = document.getElementById('btn-action-order');
                 if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
                 alert("Ошибка: " + e.message);
+            } finally {
+                orderSubmitInFlight = false;
             }
         }
 
@@ -1156,6 +1162,8 @@
         }
 
         async function sendSearch() {
+            if (searchSubmitInFlight) return;
+            searchSubmitInFlight = true;
             try {
                 if (searchItems.length === 0) return alert("Пустой поиск!");
 
@@ -1202,6 +1210,9 @@
                     sendWebAppData(payload);
                 }
             } catch (e) { alert("Ошибка: " + e.message); }
+            finally {
+                searchSubmitInFlight = false;
+            }
         }
 
         async function fetchOrderStatus(orderId, orderNumber) {

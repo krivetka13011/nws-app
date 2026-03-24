@@ -34,6 +34,33 @@ async function kvPut(env, key, value, opts) {
   }
 }
 
+/** Дедупликация webhook Telegram без KV (повтор той же доставки update_id → два заказа). */
+const TG_UPDATE_DEDUPE_PREFIX = 'https://tg-dedupe.invalid/u/';
+
+async function isTelegramUpdateAlreadyHandled(updateId) {
+  if (updateId == null) return false;
+  try {
+    const req = new Request(TG_UPDATE_DEDUPE_PREFIX + String(updateId));
+    return !!(await caches.default.match(req));
+  } catch (e) {
+    console.error('telegram dedupe cache match:', e);
+    return false;
+  }
+}
+
+async function markTelegramUpdateHandled(updateId) {
+  if (updateId == null) return;
+  try {
+    const req = new Request(TG_UPDATE_DEDUPE_PREFIX + String(updateId));
+    await caches.default.put(
+      req,
+      new Response('1', { headers: { 'Cache-Control': 'max-age=86400' } })
+    );
+  } catch (e) {
+    console.error('telegram dedupe cache put:', e);
+  }
+}
+
 /** Список ключей ImgBB: IMGBB_KEYS (через запятую/пробел) или один IMGBB_KEY */
 function parseImgbbKeys(env) {
   const raw = env.IMGBB_KEYS;
@@ -133,6 +160,52 @@ export default {
       }
       try {
         const chatId = Number(userId);
+        const ts = timestamp || Date.now();
+        const orderId = `${chatId}_${ts}`;
+
+        if (env.CLIENTS) {
+          const existingRaw = await env.CLIENTS.get(`order_${orderId}`);
+          if (existingRaw) {
+            const od = JSON.parse(existingRaw);
+            return jsonResponse({
+              ok: true,
+              orderId,
+              orderNumber: od.orderNumber,
+              totalItems: items.length,
+              processed: 0,
+              idempotent: true
+            });
+          }
+          const pendItems = await env.CLIENTS.get(`pending_items_${orderId}`);
+          if (pendItems) {
+            const pj = JSON.parse(pendItems);
+            if (pj.orderNumber != null) {
+              return jsonResponse({
+                ok: true,
+                orderId,
+                orderNumber: pj.orderNumber,
+                totalItems: items.length,
+                processed: 0,
+                idempotent: true
+              });
+            }
+          }
+          const pendJob = await env.CLIENTS.get(`pending_job_${orderId}`);
+          if (pendJob) {
+            const j = JSON.parse(pendJob);
+            const num = j.orderData?.orderNumber ?? j.orderNumber;
+            if (num != null) {
+              return jsonResponse({
+                ok: true,
+                orderId,
+                orderNumber: num,
+                queued: true,
+                idempotent: true
+              });
+            }
+          }
+        }
+
         const isWhite = /белая|white/i.test(deliveryType || '');
         const user = { id: chatId, username, first_name: firstName, last_name: lastName };
 
@@ -152,8 +225,6 @@ export default {
           `  📦  Товаров: ${items.length}` +
           (deliveryInfo ? `\n  🚚  Доставка: ${deliveryInfo}` : '');
 
-        const ts = timestamp || Date.now();
-        const orderId = `${chatId}_${ts}`;
         const orderData = {
           clientId: chatId,
           orderNumber,
@@ -2022,14 +2093,13 @@ async function handleDeliveryCommand(env, msg, threadId) {
 // ===== Update router =====
 
 /**
- * Дедупликация: ключ в KV пишем только ПОСЛЕ успешной обработки.
- * Иначе при сбое после put() повтор апдейта от Telegram видит «уже обработано» и молчит — бот «умирает».
+ * Дедупликация webhook: без KV (Cache API), чтобы повтор той же доставки не создавал второй заказ.
+ * При ошибке обработки маркер не ставим — Telegram сможет повторить.
  */
 async function handleUpdate(update, env, workerUrl) {
   if (!update) return;
 
-  // Дедуп через KV отключён: на бесплатном плане лимит put() исчерпывается за день.
-  // При повторной доставке webhook от Telegram обработка может продублироваться.
+  if (await isTelegramUpdateAlreadyHandled(update.update_id)) return;
 
   try {
     await dispatchTelegramUpdate(update, env, workerUrl);
@@ -2037,6 +2107,8 @@ async function handleUpdate(update, env, workerUrl) {
     console.error('dispatchTelegramUpdate:', e);
     throw e;
   }
+
+  await markTelegramUpdateHandled(update.update_id);
 }
 
 async function dispatchTelegramUpdate(update, env, workerUrl) {
@@ -2391,6 +2463,24 @@ function calcRub(priceYuan, isWhite) {
 
 async function handleOrder(env, chatId, user, data, workerUrl) {
   const items = Array.isArray(data.items) ? data.items : [];
+  const orderId = `${chatId}_${data.timestamp || Date.now()}`;
+
+  if (env.CLIENTS) {
+    const ex = await env.CLIENTS.get(`order_${orderId}`);
+    if (ex) {
+      console.log('handleOrder: skip duplicate (order exists)', orderId);
+      return;
+    }
+    if (await env.CLIENTS.get(`pending_items_${orderId}`)) {
+      console.log('handleOrder: skip duplicate (API pending_items)', orderId);
+      return;
+    }
+    if (await env.CLIENTS.get(`pending_job_${orderId}`)) {
+      console.log('handleOrder: skip duplicate (API pending_job)', orderId);
+      return;
+    }
+  }
+
   const isWhite = /белая|white/i.test(data.deliveryType || '');
   const { topicId } = await getOrCreateTopic(env, chatId, user);
   const groupId = getGroupId(env);
@@ -2426,8 +2516,6 @@ async function handleOrder(env, chatId, user, data, workerUrl) {
   let dest = topicId
     ? { chat_id: groupId, message_thread_id: topicId }
     : { chat_id: Number(env.MANAGER_ID) };
-
-  const orderId = `${chatId}_${data.timestamp || Date.now()}`;
 
   const lockAcquired = await acquireOrderLock(env, chatId, orderId);
   if (!lockAcquired) {
