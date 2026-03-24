@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NWS Logistics</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --card-bg: rgba(20, 25, 35, 0.7);
+            --text-color: #ffffff;
+            --text-secondary: #94a3b8;
+            
+            /* СИНЯЯ ПАЛИТРА */
+            --primary-color: #3b82f6; 
+            --accent-glow: 0 0 15px rgba(59, 130, 246, 0.25);
+            --border-color: rgba(59, 130, 246, 0.2);
+            --border-active: #3b82f6;
+            --active-bg: rgba(59, 130, 246, 0.1);
+            
+            --danger-color: #ef4444;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            overscroll-behavior: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, #0f172a 0%, #020617 80%);
+            color: var(--text-color);
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: 0; 
+        }
+
+        /* --- UI Elements --- */
+        .card {
+            background-color: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .btn-main {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 17px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn-main:active { transform: scale(0.98); box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2); }
+
+        .btn-secondary {
+            background-color: var(--active-bg);
+            border: 1px dashed var(--border-active);
+            color: #60a5fa;
+            border-radius: 16px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-secondary:active { background-color: rgba(59, 130, 246, 0.2); }
+
+        /* Явная поддержка utility-класса hidden (на случай, если Tailwind не применился) */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Inputs */
+        input, textarea {
+            background-color: rgba(0, 0, 0, 0.3);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px 20px;
+            width: 100%;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+        }
+        input.text-center { 
+            padding: 18px 10px; 
+            text-align: center;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--border-active);
+            box-shadow: var(--accent-glow);
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .price-result-box {
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 700; color: var(--text-secondary);
+        }
+        .price-result-box.active-price {
+            color: #fff;
+            border-color: var(--border-active);
+            box-shadow: var(--accent-glow);
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            background-color: var(--active-bg);
+        }
+
+        .custom-select-trigger, .option-box, .crate-option {
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex; justify-content: space-between; align-items: center;
+            color: var(--text-color);
+            font-size: 16px; font-weight: 500;
+        }
+        .option-box { display: block; position: relative; overflow: hidden; }
+        .option-box.active, .crate-option.active {
+            background-color: var(--active-bg);
+            border-color: var(--border-active);
+            box-shadow: var(--accent-glow);
+        }
+        
+        .option-title, .crate-text { color: #fff; font-weight: 600; font-size: 16px; margin-bottom: 2px; }
+        .option-sub { color: var(--text-secondary); font-size: 13px; }
+        .option-price, .crate-price { color: var(--border-active); font-weight: bold; }
+        .crate-text { margin-bottom: 0; }
+
+        .section-label {
+            display: block; font-size: 13px; font-weight: 600;
+            color: #60a5fa; margin-bottom: 12px;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            padding-left: 4px;
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Lightbox */
+        .lightbox-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 9999; display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+        }
+        .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+        .lightbox-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .lightbox-close {
+            position: absolute; top: 20px; right: 20px;
+            width: 44px; height: 44px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 24px; cursor: pointer;
+            backdrop-filter: blur(5px); z-index: 10000;
+        }
+
+        /* History */
+        .history-item {
+            background-color: rgba(30, 41, 59, 0.4); border: 1px solid var(--border-color);
+            border-radius: 16px; padding: 16px; margin-bottom: 12px; cursor: pointer;
+        }
+        .history-item:active { background-color: var(--active-bg); }
+        .history-checkbox {
+            position: relative; width: 24px; height: 24px; flex-shrink: 0;
+        }
+        .history-checkbox input {
+            position: absolute; opacity: 0; width: 24px; height: 24px; margin: 0; cursor: pointer;
+        }
+        .history-checkbox .checkbox-box {
+            position: absolute; inset: 0;
+            width: 24px; height: 24px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            background: transparent;
+            transition: all 0.2s;
+        }
+        .history-checkbox input:checked + .checkbox-box {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        .history-checkbox input:checked + .checkbox-box::after {
+            content: ''; position: absolute;
+            left: 7px; top: 3px;
+            width: 6px; height: 11px;
+            border: solid white; border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        .history-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .history-type { font-weight: 700; color: #60a5fa; font-size: 14px; text-transform: uppercase; }
+        .history-date { color: var(--text-secondary); font-size: 12px; }
+        .history-details { font-size: 14px; color: #fff; line-height: 1.4; }
+        
+        .history-status {
+            margin-top: 6px;
+            font-size: 12px;
+            line-height: 1.3;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .status-paid { color: #22c55e !important; }      /* зелёный */
+        .status-unpaid { color: #ef4444 !important; }   /* красный */
+        .history-status .status-paid, .history-status .status-unpaid { display: block; }
+        
+        /* ЦЕНА В ИСТОРИИ (2 строки) */
+        .history-price { 
+            margin-top: 6px; 
+            text-align: right; 
+            font-weight: 600; 
+            color: #fff; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: flex-end; 
+            gap: 2px;
+        }
+
+        .history-imgs {
+            display: flex; gap: 8px; margin-top: 12px;
+            overflow-x: auto; padding-bottom: 4px;
+            scrollbar-width: none;
+        }
+        .history-imgs::-webkit-scrollbar { display: none; }
+        .history-img-thumb {
+            width: 60px; height: 60px; border-radius: 12px; object-fit: cover;
+            border: 1px solid var(--border-color); flex-shrink: 0;
+            background-color: rgba(0,0,0,0.3);
+        }
+
+        /* Sheets & Nav */
+        .sheet-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8); z-index: 100;
+            opacity: 0; visibility: hidden; transition: opacity 0.3s;
+            backdrop-filter: blur(5px);
+        }
+        .sheet-overlay.open { opacity: 1; visibility: visible; }
+        .sheet-content {
+            position: fixed; bottom: -100%; left: 0; right: 0;
+            background-color: #0f172a; border-top: 1px solid var(--border-active);
+            border-top-left-radius: 24px; border-top-right-radius: 24px;
+            z-index: 101; padding: 24px 16px 40px 16px;
+            transition: bottom 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+            max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 -5px 30px rgba(59, 130, 246, 0.2);
+        }
+        .sheet-overlay.open .sheet-content { bottom: 0; }
+        .sheet-handle { width: 40px; height: 4px; background-color: #334155; border-radius: 2px; margin: 0 auto 20px auto; }
+        .sheet-option {
+            padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-color); display: flex; justify-content: space-between; align-items: center; font-size: 17px;
+        }
+        .sheet-option:last-child { border-bottom: none; }
+        .sheet-option:active { background-color: rgba(255,255,255,0.05); }
+        .sheet-option.selected { color: #60a5fa; font-weight: 600; }
+
+        .tab-content { display: none; animation: fadeIn 0.4s ease-out; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .action-bar { position: fixed; bottom: 85px; left: 0; width: 100%; padding: 0 16px; z-index: 40; pointer-events: none; }
+        .action-bar button { pointer-events: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+
+        .bottom-nav {
+            position: fixed; bottom: 20px; left: 16px; right: 16px; height: 60px;
+            background-color: rgba(15, 23, 42, 0.9); backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color); border-radius: 20px;
+            display: flex; justify-content: space-around; align-items: center;
+            z-index: 50; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 10px; color: var(--text-secondary); width: 25%; height: 100%;
+            transition: all 0.3s; position: relative;
+        }
+        .nav-item i { font-size: 20px; margin-bottom: 3px; transition: all 0.3s; }
+        .nav-item.active { color: #fff; }
+        .nav-item.active i { color: #60a5fa; filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6)); transform: translateY(-2px); }
+
+        .photo-btn {
+            width: 80px; height: 80px; border-radius: 18px; background-color: rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            border: 1px dashed var(--border-color); flex-shrink: 0; transition: all 0.2s;
+        }
+        .photo-btn:active { border-color: var(--border-active); background-color: var(--active-bg); }
+        .photo-btn i { color: var(--text-secondary); font-size: 24px; }
+        .preview-item {
+            width: 80px; height: 80px; border-radius: 18px; overflow: hidden;
+            border: 1px solid var(--border-color); position: relative; flex-shrink: 0;
+        }
+        .preview-item img { width: 100%; height: 100%; object-fit: cover; }
+        .preview-remove {
+            position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.6);
+            color: white; border-radius: 50%; width: 20px; height: 20px;
+            display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer;
+        }
+
+        /* Detail Sheet Styles */
+        .history-detail-scroll { max-height: 70vh; overflow-y: auto; padding-bottom: 40px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .detail-label { color: var(--text-secondary); font-size: 14px; }
+        .detail-value { color: #fff; font-weight: 500; font-size: 14px; text-align: right;}
+        .detail-item-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        
+        /* Исправлен хэдер детализации для переноса текста и выравнивания цены */
+        .detail-item-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; /* Цена и текст начинаются сверху */
+            margin-bottom: 8px; 
+            gap: 10px;
+        }
+        
+        /* ИСПРАВЛЕНИЕ ТЕКСТА: Белый цвет, перенос слов */
+        .detail-item-link { 
+            color: #ffffff; /* Белый цвет основного текста */
+            font-size: 14px; 
+            text-decoration: none; /* Без подчеркивания */
+            word-wrap: break-word; /* Перенос длинных слов */
+            word-break: break-word; 
+            white-space: pre-wrap; /* Сохранение переносов */
+            line-height: 1.4;
+            flex: 1; /* Занимает доступное место */
+        }
+        /* Стиль для самой ссылки (синий и подчеркнутый) */
+        .link-url {
+            color: #60a5fa;
+            text-decoration: underline;
+            word-break: break-all; /* Ссылки можно рвать в любом месте */
+        }
+        
+        /* Цена в две строки в детализации */
+        .detail-item-price { 
+            color: #fff; 
+            font-weight: bold; 
+            font-size: 14px; 
+            text-align: right;
+            flex-shrink: 0; /* Не сжимать блок цены */
+        }
+        
+        .detail-item-imgs { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; }
+        .detail-item-img { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border-color); }
+        
+        .scroll-spacer { height: 200px; width: 100%; flex-shrink: 0; }
+    </style>
+</head>
+<body class="p-4">
+
+    <!-- LIGHTBOX -->
+    <div class="lightbox-overlay" id="lightbox">
+        <div class="lightbox-close" onclick="closeLightbox()"><i class="fas fa-times"></i></div>
+        <img src="" class="lightbox-img" id="lightboxImg">
+    </div>
+
+    <!-- TAB 1: CALCULATOR -->
+    <div id="tab-calc" class="tab-content active">
+        <h2 class="text-3xl font-bold mb-6 px-2 text-white">Калькулятор</h2>
+        <div class="space-y-5">
+            <div class="card p-5">
+                <label class="section-label">Упаковка</label>
+                <div class="custom-select-trigger mb-4" onclick="openBoxSheet()">
+                    <span id="selectedBoxName" class="font-medium">Выберите упаковку</span>
+                    <i class="fas fa-chevron-down text-gray-400"></i>
+                </div>
+                
+                <div id="boxDesc" class="mt-2 mb-4 text-[14px] leading-relaxed text-[var(--text-secondary)] bg-[rgba(0,0,0,0.3)] p-4 rounded-2xl hidden border border-[var(--border-color)]"></div>
+                
+                <div class="option-box crate-row" id="crateOption" onclick="toggleCrate()">
+                    <span class="option-title">Обрешетка</span>
+                    <span class="option-price">+299 ₽</span>
+                </div>
+            </div>
+            <div id="customDims" class="hidden animate-fade-in">
+                <div class="card p-5">
+                    <label class="section-label">Габариты и Вес</label>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <input type="number" id="dimL" placeholder="Длина (см)" class="text-center" oninput="updateCalc()">
+                        <input type="number" id="dimW" placeholder="Ширина (см)" class="text-center" oninput="updateCalc()">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="number" id="dimH" placeholder="Высота (см)" class="text-center" oninput="updateCalc()">
+                        <input type="number" id="weight" placeholder="Вес (кг)" class="text-center" oninput="updateCalc()">
+                    </div>
+                </div>
+            </div>
+            <div class="card p-6 text-center" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(30, 58, 138, 0.3) 100%); border-color: var(--border-active);">
+                <span class="text-blue-200 text-sm font-medium uppercase tracking-widest" style="text-shadow: 0 0 10px rgba(96, 165, 250, 0.5);">Ориентировочно</span>
+                <div class="text-5xl font-extrabold mt-3 tracking-tight text-white" style="text-shadow: 0 0 20px rgba(96, 165, 250, 0.6);">
+                    <span id="totalPrice">0</span> ₽
+                </div>
+            </div>
+            <p class="text-[12px] text-center text-[var(--text-secondary)] px-4 mt-2 opacity-60">
+                *Итоговая стоимость фиксируется на складе.
+            </p>
+        </div>
+        <div class="scroll-spacer"></div>
+    </div>
+
+    <!-- TAB 2: ORDER -->
+    <div id="tab-order" class="tab-content">
+        <div class="flex items-center justify-between mb-6 px-2">
+            <h2 class="text-3xl font-bold text-white">Выкуп</h2>
+            <button onclick="openOrderHelp()" class="w-9 h-9 rounded-full border border-[var(--border-color)] flex items-center justify-center text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">
+                <i class="fas fa-question"></i>
+            </button>
+        </div>
+        <div class="card p-5 mb-6">
+            <label class="section-label">Тип доставки</label>
+            <div class="grid grid-cols-1 gap-3">
+                <div class="option-box active" onclick="setDeliveryType('grey')" id="del-grey">
+                    <div class="option-title">Серая доставка</div>
+                    <div class="option-sub">20-35 дней • Комиссия 5%</div>
+                </div>
+                <div class="option-box" onclick="setDeliveryType('white')" id="del-white">
+                    <div class="option-title">Белая доставка</div>
+                    <div class="option-sub">12-15 дней • Комиссия 10%</div>
+                </div>
+            </div>
+        </div>
+        <div id="orderItemsList" class="space-y-4"></div>
+        <button onclick="addOrderItem()" class="w-full mt-6 py-4 btn-secondary gap-2 border-dashed">
+            <i class="fas fa-plus text-lg"></i> <span class="text-lg">Добавить товар</span>
+        </button>
+        <div class="scroll-spacer"></div>
+    </div>
+
+    <!-- TAB 3: SEARCH -->
+    <div id="tab-search" class="tab-content">
+        <h2 class="text-3xl font-bold mb-6 px-2 text-white">Поиск</h2>
+        <div id="searchItemsList" class="space-y-4"></div>
+        <button onclick="addSearchItem()" class="w-full mt-6 py-4 btn-secondary gap-2 border-dashed">
+            <i class="fas fa-plus text-lg"></i> <span class="text-lg">Добавить позицию</span>
+        </button>
+        <div class="scroll-spacer"></div>
+    </div>
+
+    <!-- TAB 4: HISTORY -->
+    <div id="tab-history" class="tab-content">
+        <div class="flex items-center justify-between mb-6 px-2">
+            <h2 class="text-3xl font-bold text-white">История</h2>
+            <div class="flex gap-2 items-center">
+                <button onclick="renderHistory()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition" title="Обновить"><i class="fas fa-sync-alt"></i></button>
+                <button id="btn-delete-toggle" onclick="toggleDeleteMode()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hover:border-[var(--border-active)] active:scale-95 transition">Удалить</button>
+                <button id="btn-cancel-delete" onclick="toggleDeleteMode()" class="text-sm px-4 py-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-white hidden">Отмена</button>
+                <button id="btn-delete-confirm" onclick="confirmDeleteSelected()" class="text-sm px-4 py-2 rounded-xl bg-[var(--danger-color)] text-white hidden">Удалить выбранные</button>
+            </div>
+        </div>
+        <div id="historyList" class="space-y-4"></div>
+        <div class="scroll-spacer"></div>
+    </div>
+
+    <!-- BOX SHEET -->
+    <div class="sheet-overlay" id="boxSheet" onclick="closeBoxSheet(event)">
+        <div class="sheet-content" onclick="event.stopPropagation()">
+            <div class="sheet-handle" onclick="closeBoxSheet()"></div>
+            <h3 class="text-xl font-bold mb-6 px-2 text-white">Выберите размер</h3>
+            <div class="sheet-option" onclick="selectBox('Mini', 679, 'Вещи (футболка, сумка, ремень, носки)')">
+                <div class="flex flex-col"><span class="text-lg font-medium text-white">Mini</span><span class="text-sm text-[var(--text-secondary)] mt-1">23x17x13 см, до 0.6 кг</span></div>
+                <span class="text-blue-400 font-bold text-lg">679 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('Small', 1562, 'Пара обуви в коробке')">
+                 <div class="flex flex-col"><span class="text-lg font-medium text-white">Small</span><span class="text-sm text-[var(--text-secondary)] mt-1">36x26x14 см, до 1.5 кг</span></div>
+                <span class="text-blue-400 font-bold text-lg">1 562 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('Large', 2411, 'Пара обуви в коробке + несколько вещей')">
+                 <div class="flex flex-col"><span class="text-lg font-medium text-white">Large</span><span class="text-sm text-[var(--text-secondary)] mt-1">40x29x16 см, до 2.5 кг</span></div>
+                <span class="text-blue-400 font-bold text-lg">2 411 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('X-Large', 3489, 'Две пары обуви в коробке + несколько вещей')">
+                 <div class="flex flex-col"><span class="text-lg font-medium text-white">X-Large</span><span class="text-sm text-[var(--text-secondary)] mt-1">37x29x28 см, до 3.5 кг</span></div>
+                <span class="text-blue-400 font-bold text-lg">3 489 ₽</span>
+            </div>
+            <div class="sheet-option" onclick="selectBox('custom', 0, 'Расчет по объемному весу')">
+                <span class="text-lg text-white">Свой размер</span>
+                <span class="text-[var(--text-secondary)] text-sm">Калькулятор</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- DETAILS SHEET -->
+    <div class="sheet-overlay" id="historyDetailSheet" onclick="closeHistoryDetails(event)">
+        <div class="sheet-content" onclick="event.stopPropagation()">
+            <div class="sheet-handle" onclick="closeHistoryDetails()"></div>
+            <h3 class="text-xl font-bold mb-4 px-2 text-white" id="detailTitle">Детали заказа</h3>
+            <div class="card p-4 mb-4">
+                <div class="detail-row"><span class="detail-label">Дата и время</span><span class="detail-value" id="detailDate"></span></div>
+                <div class="detail-row"><span class="detail-label">Тип доставки</span><span class="detail-value" id="detailDelivery"></span></div>
+                <div class="detail-row"><span class="detail-label">Статус заказа</span><span class="detail-value" id="detailOrderStatus"></span></div>
+                <div class="detail-row"><span class="detail-label">Статус доставки</span><span class="detail-value" id="detailDeliveryStatus"></span></div>
+                <div class="detail-row" style="border-bottom:none;"><span class="detail-label">Итоговая сумма</span><span class="detail-value text-[#60a5fa]" id="detailTotal"></span></div>
+            </div>
+            <h4 class="text-sm font-bold text-[var(--text-secondary)] uppercase mb-3 px-2">Список товаров</h4>
+            <div id="detailItemsList" class="history-detail-scroll"></div>
+        </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="action-bar">
+        <button id="btn-action-calc" onclick="sendCalc()" class="btn-main w-full py-4 text-lg shadow-xl">Рассчитать</button>
+        <button id="btn-action-order" onclick="sendOrder()" class="btn-main w-full py-4 text-lg shadow-xl hidden">Оформить заказ</button>
+        <button id="btn-action-search" onclick="sendSearch()" class="btn-main w-full py-4 text-lg shadow-xl hidden">Найти</button>
+        <button id="btn-action-history" class="btn-main w-full py-4 text-lg shadow-xl hidden" style="opacity: 0; pointer-events: none;">.</button>
+    </div>
+
+    <!-- NAV -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('calc')"><i class="fas fa-calculator"></i><span>Калькулятор</span></div>
+        <div class="nav-item" onclick="switchTab('order')"><i class="fas fa-shopping-bag"></i><span>Выкуп</span></div>
+        <div class="nav-item" onclick="switchTab('search')"><i class="fas fa-search"></i><span>Поиск</span></div>
+        <div class="nav-item" onclick="switchTab('history')"><i class="fas fa-history"></i><span>История</span></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor('#050505');
+        tg.setBackgroundColor('#050505');
+        const RATE_MULTIPLIER = 13; 
+        const ORDER_HELP_URL = 'https://telegra.ph/Kak-pravilno-oformlyat-zakazy-03-03'; 
+        const WORKER_URL = 'https://nwsnumbot.krivetkagames.workers.dev';
+        const ORDER_STATUS_URL = `${WORKER_URL}/order-status`;
+        const ORDERS_URL = `${WORKER_URL}/orders`;
+        
+        let currentTab = 'calc';
+        let orderItems = [];
+        let searchItems = [];
+        let deliveryType = 'grey'; 
+        let historyDataCache = [];
+        let lastOrdersCache = [];
+        let currentDetailItem = null;
+
+        // --- HISTORY LOGIC (Cloudflare KV + localStorage fallback) ---
+        const HISTORY_LOCAL_KEY = 'nws_history';
+        const USER_ID_KEY = 'nws_user_id';
+
+        function getHistoryUserId() {
+            const tgId = tg.initDataUnsafe?.user?.id;
+            if (tgId) {
+                try { localStorage.setItem(USER_ID_KEY, String(tgId)); } catch (_) {}
+                return tgId;
+            }
+            try {
+                const urlId = new URLSearchParams(window.location.search).get('uid');
+                if (urlId && Number(urlId) > 0) {
+                    localStorage.setItem(USER_ID_KEY, urlId);
+                    return Number(urlId);
+                }
+            } catch (_) {}
+            try {
+                const stored = localStorage.getItem(USER_ID_KEY);
+                if (stored) return Number(stored);
+            } catch (_) {}
+            return undefined;
+        }
+
+        async function saveHistoryToBackend(history, userId) {
+            if (userId) {
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/history`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: String(userId), history })
+                    });
+                    if (res.ok) return true;
+                } catch (_) {}
+            }
+            try {
+                localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(history));
+                return true;
+            } catch (e) { return false; }
+        }
+
+        async function addToHistoryV2(dataObj) {
+            const userId = getHistoryUserId();
+            try {
+                let storageObj = JSON.parse(JSON.stringify(dataObj));
+                if (JSON.stringify(storageObj).length > 3500 && storageObj.itemsData) {
+                    storageObj.itemsData = storageObj.itemsData.map(i => {
+                        const imgUrls = (i.imgUrls || []).slice(0, 2);
+                        const imgDeleteUrls = (i.imgDeleteUrls || []).slice(0, imgUrls.length);
+                        return { ...i, imgUrls, imgDeleteUrls };
+                    });
+                    if (JSON.stringify(storageObj).length > 25000) {
+                        storageObj.itemsData = storageObj.itemsData.map(i => {
+                            const { imgUrls, imgDeleteUrls, ...rest } = i;
+                            return rest;
+                        });
+                    }
+                }
+                const addToLocal = () => {
+                    const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
+                    let arr = raw ? JSON.parse(raw) : [];
+                    if (!Array.isArray(arr)) arr = [];
+                    arr.unshift(storageObj);
+                    if (arr.length > 20) arr = arr.slice(0, 20);
+                    localStorage.setItem(HISTORY_LOCAL_KEY, JSON.stringify(arr));
+                };
+                if (userId) {
+                    try {
+                        const res = await fetch(`${WORKER_URL}/api/history`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: String(userId), orderData: storageObj })
+                        });
+                        if (res.ok) { addToLocal(); return; }
+                    } catch (_) {}
+                }
+                addToLocal();
+            } catch (e) { console.error('History save error:', e); }
+        }
+
+        async function updateHistoryOrderNumber(orderId, orderNumber) {
+            if (!orderId || !orderNumber) return;
+            const history = await loadFullHistory();
+            const item = history.find(h => h.title === 'Заказ на выкуп' && h.orderId === orderId);
+            if (item && !item.orderNumber) {
+                item.orderNumber = orderNumber;
+                await saveHistoryToBackend(history, getHistoryUserId());
+            }
+        }
+
+        async function pollContinueOrder(orderId) {
+            for (let i = 0; i < 60; i++) {
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/continue-order`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId })
+                    });
+                    const data = await res.json();
+                    if (data.done) return;
+                    if (data.busy) { await sleep(500); continue; }
+                } catch (_) {}
+                await sleep(1500);
+            }
+        }
+
+        async function loadFullHistory() {
+            const userId = getHistoryUserId();
+            if (userId) {
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/history?userId=${encodeURIComponent(userId)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        return Array.isArray(data) ? data : [];
+                    }
+                } catch (_) {}
+            }
+            try {
+                const raw = localStorage.getItem(HISTORY_LOCAL_KEY);
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    return Array.isArray(arr) ? arr : [];
+                }
+            } catch (_) {}
+            return [];
+        }
+
+        // --- UI LOGIC ---
+        function openLightbox(src) {
+            const lb = document.getElementById('lightbox');
+            document.getElementById('lightboxImg').src = src;
+            lb.classList.add('open');
+        }
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('open');
+        }
+
+        function openOrderHelp() {
+            try {
+                if (tg && typeof tg.openLink === 'function') {
+                    // Просим Telegram открыть Instant View / Telegraph c сохранением темы
+                    tg.openLink(ORDER_HELP_URL, { try_instant_view: true });
+                } else {
+                    window.open(ORDER_HELP_URL, '_blank');
+                }
+            } catch (e) {
+                window.open(ORDER_HELP_URL, '_blank');
+            }
+        }
+
+        function formatLinks(text) {
+            if(!text) return '';
+            // Regex matches http/https URLs. 
+            // Replaces them with span class="link-url"
+            return text.replace(/(https?:\/\/[^\s]+)/g, '<span class="link-url">$1</span>');
+        }
+
+        async function openHistoryDetails(index) {
+            const item = historyDataCache[index];
+            if(!item) return;
+            currentDetailItem = item;
+
+            let orderStatusText = item.orderStatus || '🔴 Заказ: Не оплачен';
+            let deliveryStatusText = item.deliveryStatus || '🔴 Доставка: Счёт не выставлен';
+            if (item.title === 'Заказ на выкуп') {
+                let orders = await fetchOrdersForClient();
+                lastOrdersCache = orders;
+                let status = findOrderStatus(orders, item);
+                if (!status && (item.orderNumber || item.orderId)) {
+                    status = await fetchOrderStatus(item.orderId, item.orderNumber);
+                    if (status) status = { orderId: item.orderId, orderNumber: item.orderNumber, ...status };
+                }
+                if (status) {
+                    if (!item.orderNumber) item.orderNumber = status.orderNumber;
+                    if (status.orderId) item.orderId = status.orderId;
+                }
+                const formatted = formatOrderStatus(status);
+                orderStatusText = formatted.order;
+                deliveryStatusText = formatted.delivery;
+            }
+
+            document.getElementById('detailTitle').innerText = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : item.title;
+            document.getElementById('detailDate').innerText = item.date;
+            document.getElementById('detailDelivery').innerText = item.delivery || 'Не указано';
+            document.getElementById('detailTotal').innerText = item.price ? item.price.replace(/<[^>]*>/g, '').split('(')[0].trim() : '0 ₽';
+            const orderEl = document.getElementById('detailOrderStatus');
+            const delEl = document.getElementById('detailDeliveryStatus');
+            orderEl.innerText = orderStatusText;
+            delEl.innerText = deliveryStatusText;
+            orderEl.className = 'detail-value ' + (orderStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid');
+            delEl.className = 'detail-value ' + (deliveryStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid');
+
+            const listContainer = document.getElementById('detailItemsList');
+            listContainer.innerHTML = '';
+
+            if(item.itemsData && item.itemsData.length > 0) {
+                item.itemsData.forEach(prod => {
+                    let imgsHtml = '';
+                    if(prod.imgUrls && prod.imgUrls.length > 0) {
+                        imgsHtml = `<div class="detail-item-imgs">
+                            ${prod.imgUrls.map(url => `<img src="${url}" class="detail-item-img" onclick="openLightbox('${url}')">`).join('')}
+                        </div>`;
+                    }
+                    
+                    const rub = Math.ceil((parseFloat(prod.price)+30)*((item.delivery && item.delivery.includes('Белая') ? 1.1 : 1.05)) * 13);
+                    // Price on two lines
+                    const priceHtml = prod.price ? `<div class="detail-item-price"><div>${formatPrice(rub)} ₽</div><div class="text-[var(--text-secondary)] text-xs font-normal">(${prod.price} ¥)</div></div>` : '';
+                    
+                    // Format text to highlight links
+                    const rawText = prod.link || prod.comment || 'Товар';
+                    const formattedText = formatLinks(rawText);
+
+                    const html = `
+                        <div class="detail-item-card">
+                            <div class="detail-item-header">
+                                <div class="detail-item-link">${formattedText}</div>
+                                ${priceHtml}
+                            </div>
+                            ${imgsHtml}
+                        </div>
+                    `;
+                    listContainer.insertAdjacentHTML('beforeend', html);
+                });
+            } else {
+                listContainer.innerHTML = '<div class="text-center text-gray-500 py-4">Нет списка товаров</div>';
+            }
+            document.getElementById('historyDetailSheet').classList.add('open');
+        }
+
+        function closeHistoryDetails(event) {
+            if (!event || event.target === document.getElementById('historyDetailSheet') || event.target.classList.contains('sheet-handle')) {
+                document.getElementById('historyDetailSheet').classList.remove('open');
+            }
+        }
+
+
+        function formatPrice(num) {
+            if(!num) return '0';
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+        }
+
+        async function compressImage(file, maxWidth = 720, maxHeight = 720, quality = 0.72) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                        if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
+                    } else {
+                        if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
+                    }
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob(resolve, file.type, quality);
+                };
+                img.onerror = reject;
+            });
+        }
+
+        function setDeliveryType(type) {
+            deliveryType = type;
+            document.querySelectorAll('.option-box').forEach(el => el.classList.remove('active'));
+            document.getElementById(`del-${type}`).classList.add('active');
+            orderItems.forEach(item => updateOrderItem(item.id, 'price', item.price, true));
+        }
+
+        let currentBox = { type: '', price: 0, l:0, w:0, h:0 };
+        let hasCrate = false;
+
+        function openBoxSheet() { document.getElementById('boxSheet').classList.add('open'); }
+        function closeBoxSheet(event) {
+            if (!event || event.target === document.getElementById('boxSheet') || event.target.classList.contains('sheet-handle')) {
+                document.getElementById('boxSheet').classList.remove('open');
+            }
+        }
+
+        function toggleCrate() {
+            hasCrate = !hasCrate;
+            const el = document.getElementById('crateOption');
+            if(hasCrate) el.classList.add('active'); else el.classList.remove('active');
+            updateCalc();
+        }
+
+        function selectBox(type, price, desc) {
+            currentBox.type = type; currentBox.price = price;
+            const triggerText = document.getElementById('selectedBoxName');
+            const descEl = document.getElementById('boxDesc');
+            const customDiv = document.getElementById('customDims');
+            document.querySelectorAll('.sheet-option').forEach(el => el.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+            if (type === 'custom') {
+                triggerText.innerText = "Свой размер";
+                descEl.classList.add('hidden'); // Hide for custom
+                customDiv.classList.remove('hidden');
+            } else {
+                triggerText.innerText = type;
+                descEl.classList.remove('hidden'); descEl.innerText = desc;
+                customDiv.classList.add('hidden');
+                const sizes = {'Mini': [23,17,13], 'Small': [36,26,14], 'Large': [40,29,16], 'X-Large': [37,29,28]};
+                if(sizes[type]) [currentBox.l, currentBox.w, currentBox.h] = sizes[type];
+            }
+            updateCalc();
+            document.getElementById('boxSheet').classList.remove('open');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('btn-action-calc').classList.add('hidden');
+            document.getElementById('btn-action-order').classList.add('hidden');
+            document.getElementById('btn-action-search').classList.add('hidden');
+            document.getElementById('btn-action-history').classList.add('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            if(tab !== 'history') document.getElementById(`btn-action-${tab}`).classList.remove('hidden');
+            const tabs = ['calc', 'order', 'search', 'history'];
+            document.querySelectorAll('.nav-item')[tabs.indexOf(tab)].classList.add('active');
+            currentTab = tab;
+            if(tab === 'order' && orderItems.length === 0) addOrderItem();
+            if(tab === 'search' && searchItems.length === 0) addSearchItem();
+            if(tab === 'history') renderHistory();
+        }
+
+        function updateCalc() {
+            const priceEl = document.getElementById('totalPrice');
+            let price = (currentBox.type === 'custom') ? 0 : currentBox.price;
+            if (price > 0 && hasCrate) price += 299;
+            priceEl.innerText = formatPrice(price);
+        }
+
+        function sendCalc() {
+            try {
+                if (!currentBox.type) return alert("Выберите упаковку!");
+                if (currentBox.type === 'custom') {
+                    const l = document.getElementById('dimL').value;
+                    const w = document.getElementById('dimW').value;
+                    const h = document.getElementById('dimH').value;
+                    const weight = document.getElementById('weight').value;
+                    if (!l || !w || !h || !weight) return alert("Введите габариты и вес!");
+                }
+                let data = { type: 'calc', packPrice: document.getElementById('totalPrice').innerText, hasCrate: hasCrate };
+                if (currentBox.type === 'custom') {
+                    data.boxName = 'Свой размер'; data.l = document.getElementById('dimL').value;
+                    data.w = document.getElementById('dimW').value; data.h = document.getElementById('dimH').value;
+                    data.weight = document.getElementById('weight').value;
+                } else {
+                    data.boxName = `Коробка ${currentBox.type}`;
+                    data.l = currentBox.l; data.w = currentBox.w; data.h = currentBox.h;
+                }
+                tg.sendData(JSON.stringify(data));
+            } catch (e) { alert("Ошибка: " + e.message); }
+        }
+
+        function updateItemNumbers(type) {
+            const listId = type === 'order' ? 'orderItemsList' : 'searchItemsList';
+            const prefix = type === 'order' ? 'Товар' : 'Позиция';
+            const labels = document.getElementById(listId).querySelectorAll('.section-label');
+            labels.forEach((label, index) => { label.innerText = `${prefix} №${index + 1}`; });
+        }
+
+        function addOrderItem() {
+            const id = Date.now();
+            const html = `
+                <div id="order-item-${id}" class="card p-5 relative animate-fade-in">
+                    <button onclick="removeElement('order-item-${id}', 'order')" class="delete-btn absolute top-4 right-4 text-[var(--danger-color)] p-2 hover:bg-white/10 rounded-full transition"><i class="fas fa-times text-xl"></i></button>
+                    <label class="section-label">Товар</label> 
+                    <input type="text" class="mb-4" placeholder="Ссылка на товар" onchange="updateOrderItem(${id}, 'link', this.value)">
+                    <div class="flex gap-4 mb-4" style="height: 58px;">
+                        <div class="w-1/2 h-full"><input type="number" placeholder="Цена (¥)" style="height: 100%;" oninput="updateOrderItem(${id}, 'price', this.value)"></div>
+                        <div class="w-1/2 h-full"><div id="res-rub-${id}" class="price-result-box">0 ₽</div></div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center" id="preview-area-${id}">
+                        <label class="photo-btn"><i class="fas fa-camera"></i><input type="file" accept="image/*" multiple class="hidden" onchange="handleImageUpload(this, ${id}, 'order')"></label>
+                    </div>
+                </div>
+            `;
+            document.getElementById('orderItemsList').insertAdjacentHTML('beforeend', html);
+            orderItems.push({ id, link: '', price: 0, resYuan: 0, resRub: 0, imgUrls: [], imgDeleteUrls: [] });
+            updateDeleteButtons('order'); updateItemNumbers('order');
+        }
+
+        function updateOrderItem(id, field, value, forceUpdate = false) {
+            const item = orderItems.find(i => i.id === id);
+            if (!item) return;
+            if (field === 'price' || forceUpdate) {
+                const val = parseFloat(value) || 0; item.price = val;
+                const resBox = document.getElementById(`res-rub-${id}`);
+                if (val === 0) {
+                     resBox.innerText = `0 ₽`; resBox.classList.remove('active-price'); item.resYuan = 0; item.resRub = 0;
+                } else {
+                    const commission = deliveryType === 'white' ? 0.10 : 0.05;
+                    const priceWithShipping = val + 30;
+                    const commissionSum = priceWithShipping * commission;
+                    const rub = Math.ceil((priceWithShipping + commissionSum) * RATE_MULTIPLIER);
+                    item.resYuan = val; item.resRub = rub; resBox.innerText = `${formatPrice(rub)} ₽`; resBox.classList.add('active-price');
+                }
+            } else { item[field] = value; }
+        }
+
+        async function sendOrder() {
+            try {
+                if (orderItems.length === 0) return alert("Пустой заказ!");
+
+                let totalRub = 0;
+                let totalYuan = 0;
+                orderItems.forEach(i => {
+                    const val = i.price || 0;
+                    if (val > 0) {
+                        totalYuan += val;
+                        const comm = deliveryType === 'white' ? 0.10 : 0.05;
+                        totalRub += Math.ceil(((val + 30) + (val + 30) * comm) * RATE_MULTIPLIER);
+                    }
+                });
+
+                const orderTs = Date.now();
+                const userId = getHistoryUserId() || 0;
+
+                const historyImages = orderItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                const priceHtml = totalRub > 0 ? `<div>${formatPrice(totalRub)} ₽</div><div style="font-size:13px; color:#94a3b8; margin-top:2px;">(${formatPrice(totalYuan)} ¥)</div>` : 'Цена не указана';
+                const orderId = `${userId}_${orderTs}`;
+                await addToHistoryV2({
+                    title: 'Заказ на выкуп', date: new Date().toLocaleString('ru-RU'),
+                    delivery: deliveryType === 'white' ? 'Белая' : 'Серая',
+                    price: priceHtml, totalRub, itemsData: orderItems.map(i => ({ ...i, imgDeleteUrls: i.imgDeleteUrls || [] })), images: historyImages,
+                    orderId, timestamp: orderTs,
+                    orderStatus: '🔴 Заказ: Не оплачен', deliveryStatus: '🔴 Доставка: Счёт не выставлен'
+                });
+
+                const btn = document.getElementById('btn-action-order');
+                if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка...'; }
+
+                // Use API path for full photo support
+                const apiBody = {
+                    userId, username: tg.initDataUnsafe?.user?.username || '',
+                    firstName: tg.initDataUnsafe?.user?.first_name || '',
+                    lastName: tg.initDataUnsafe?.user?.last_name || '',
+                    items: orderItems.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, imgUrls: (i.imgUrls || []).slice(0, MAX_PHOTOS_PER_ITEM) })),
+                    deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
+                    timestamp: orderTs
+                };
+
+                let apiOk = false;
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/create-order`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(apiBody)
+                    });
+                    const result = await res.json();
+                    if (result.ok) {
+                        apiOk = true;
+                        if (result.orderNumber) {
+                            updateHistoryOrderNumber(orderId, result.orderNumber);
+                        }
+                        if (result.totalItems > 0 && result.orderId && !result.queued) {
+                            pollContinueOrder(result.orderId);
+                        }
+                        if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
+                        setTimeout(() => tg.close(), 800);
+                    }
+                } catch (apiErr) {
+                    console.error('API error, fallback to sendData:', apiErr);
+                }
+
+                // Fallback to tg.sendData if API failed
+                if (!apiOk) {
+                    const data = {
+                        type: 'order',
+                        items: orderItems.map(i => ({ ...i, imgUrls: (i.imgUrls || []).slice(0, MAX_PHOTOS_PER_ITEM) })),
+                        deliveryType: deliveryType === 'white' ? 'Белая (12-15 дн)' : 'Серая (20-35 дн)',
+                        timestamp: orderTs
+                    };
+                    let json = JSON.stringify(data);
+                    if (json.length > 4000) {
+                        data.items = data.items.map(i => ({ link: i.link, price: i.price, resYuan: i.resYuan, resRub: i.resRub, imgUrls: (i.imgUrls || []).slice(0, 2) }));
+                        json = JSON.stringify(data);
+                        if (json.length > 4000) { data.items = data.items.map(i => ({ ...i, imgUrls: [] })); json = JSON.stringify(data); }
+                    }
+                    tg.sendData(json);
+                    if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
+                }
+            } catch (e) {
+                const btn = document.getElementById('btn-action-order');
+                if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
+                alert("Ошибка: " + e.message);
+            }
+        }
+
+        function addSearchItem() {
+            const id = Date.now();
+            const html = `
+                <div id="search-item-${id}" class="card p-5 relative animate-fade-in">
+                    <button onclick="removeElement('search-item-${id}', 'search')" class="delete-btn absolute top-4 right-4 text-[var(--danger-color)] p-2 hover:bg-white/10 rounded-full transition"><i class="fas fa-times text-xl"></i></button>
+                    <label class="section-label">Позиция</label>
+                    <textarea class="mb-4 h-28 resize-none" placeholder="Комментарий" onchange="updateSearchItem(${id}, 'comment', this.value)"></textarea>
+                    <div class="flex flex-wrap gap-2 items-center" id="search-preview-area-${id}">
+                        <label class="photo-btn"><i class="fas fa-camera"></i><input type="file" accept="image/*" multiple class="hidden" onchange="handleImageUpload(this, ${id}, 'search')"></label>
+                    </div>
+                </div>
+            `;
+            document.getElementById('searchItemsList').insertAdjacentHTML('beforeend', html);
+            searchItems.push({ id, comment: '', imgUrls: [], imgDeleteUrls: [] });
+            updateDeleteButtons('search'); updateItemNumbers('search');
+        }
+
+        function updateSearchItem(id, field, value) {
+            const item = searchItems.find(i => i.id === id); if (item) item[field] = value;
+        }
+
+        function removeElement(elementId, type) {
+            const list = type === 'order' ? orderItems : searchItems;
+            if (list.length <= 1) return;
+            document.getElementById(elementId).remove();
+            const id = parseInt(elementId.split('-').pop());
+            if (type === 'order') orderItems = orderItems.filter(i => i.id !== id);
+            else searchItems = searchItems.filter(i => i.id !== id);
+            updateDeleteButtons(type); updateItemNumbers(type);
+        }
+
+        function updateDeleteButtons(type) {
+            const list = type === 'order' ? orderItems : searchItems;
+            const containerId = type === 'order' ? 'orderItemsList' : 'searchItemsList';
+            const buttons = document.querySelectorAll(`#${containerId} .delete-btn`);
+            buttons.forEach(btn => { btn.style.display = list.length > 1 ? 'block' : 'none'; });
+        }
+
+        const MAX_PHOTOS_PER_ITEM = 9;
+        const UPLOAD_DELAY_MS = 150;
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        async function handleImageUpload(input, id, type) {
+            let files = Array.from(input.files); if (!files.length) return;
+            const list = type === 'order' ? orderItems : searchItems;
+            const item = list.find(i => i.id === id);
+            const existing = item?.imgUrls?.length || 0;
+            if (existing >= MAX_PHOTOS_PER_ITEM) { alert(`Максимум ${MAX_PHOTOS_PER_ITEM} фото в позиции.`); input.value = ''; return; }
+            const maxNew = MAX_PHOTOS_PER_ITEM - existing;
+            if (files.length > maxNew) { alert(`Максимум ${MAX_PHOTOS_PER_ITEM} фото. Будут добавлены последние ${maxNew}.`); files = files.slice(-maxNew); }
+            const previewArea = document.getElementById(type === 'order' ? `preview-area-${id}` : `search-preview-area-${id}`);
+            const btnLabel = previewArea.querySelector('label');
+            for (let i = 0; i < files.length; i++) {
+                if (i > 0) await sleep(UPLOAD_DELAY_MS);
+                const file = files[i]; const loadId = `load-${Date.now()}-${i}`;
+                const loadingHtml = `<div id="${loadId}" class="photo-btn animate-pulse border-none"><i class="fas fa-spinner fa-spin text-white"></i></div>`;
+                btnLabel.insertAdjacentHTML('beforebegin', loadingHtml);
+                try {
+                    const compressedBlob = await compressImage(file);
+                    const formData = new FormData();
+                    formData.append("image", compressedBlob, file.name);
+                    const response = await fetch(`${WORKER_URL}/api/upload-image`, { method: "POST", body: formData });
+                    const data = await response.json();
+                    document.getElementById(loadId).remove();
+                    if (data.success && data.data) {
+                        const imgUrl = data.data.url; const deleteUrl = data.data.delete_url || null;
+                        const thumbUrl = (data.data.thumb && data.data.thumb.url) || imgUrl;
+                        const list = type === 'order' ? orderItems : searchItems;
+                        const item = list.find(i => i.id === id);
+                        if (item) {
+                            item.imgUrls.push(imgUrl);
+                            item.imgDeleteUrls = item.imgDeleteUrls || [];
+                            item.imgDeleteUrls.push(deleteUrl);
+                        }
+                        const imgDiv = document.createElement('div');
+                        imgDiv.className = 'preview-item';
+                        imgDiv.innerHTML = `<img src="${thumbUrl}" onclick="openLightbox('${imgUrl}')"><div class="preview-remove" onclick="removeImage(${id}, '${imgUrl}', '${type}', this)"><i class="fas fa-times"></i></div>`;
+                        btnLabel.insertAdjacentElement('beforebegin', imgDiv);
+                    } else {
+                        const rawErr = data.error?.message || data.error || (data.data && data.data.error && (data.data.error.message || data.data.error)) || "";
+                        const isRateLimit = /rate limit|too many|лимит/i.test(rawErr);
+                        const errMsg = isRateLimit ? "Лимит загрузок. Подождите 1–2 минуты и попробуйте снова." : (rawErr || "Ошибка загрузки фото");
+                        alert("Ошибка загрузки фото: " + errMsg);
+                    }
+                } catch (error) {
+                    if(document.getElementById(loadId)) document.getElementById(loadId).remove();
+                    alert("Ошибка сети");
+                }
+            }
+            input.value = '';
+        }
+
+        function removeImage(itemId, imgUrl, type, btnElement) {
+            const list = type === 'order' ? orderItems : searchItems;
+            const item = list.find(i => i.id === itemId);
+            if (item) {
+                const idx = item.imgUrls.indexOf(imgUrl);
+                item.imgUrls = item.imgUrls.filter(url => url !== imgUrl);
+                if (item.imgDeleteUrls && idx >= 0) item.imgDeleteUrls.splice(idx, 1);
+            }
+            btnElement.parentElement.remove();
+        }
+
+        async function sendSearch() {
+            try {
+                if (searchItems.length === 0) return alert("Пустой поиск!");
+
+                const userId = getHistoryUserId() || 0;
+                const itemsForApi = searchItems.map(i => ({
+                    link: i.link, comment: i.comment, imgUrls: (i.imgUrls || []).slice(0, 9),
+                    imgDeleteUrls: (i.imgDeleteUrls || []).slice(0, (i.imgUrls || []).length)
+                }));
+                let apiOk = false;
+                try {
+                    const res = await fetch(`${WORKER_URL}/api/create-search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId,
+                            username: tg.initDataUnsafe?.user?.username || '',
+                            firstName: tg.initDataUnsafe?.user?.first_name || '',
+                            lastName: tg.initDataUnsafe?.user?.last_name || '',
+                            items: itemsForApi
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.ok && data.orderNumber) {
+                        apiOk = true;
+                        const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                        await addToHistoryV2({
+                            title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
+                            delivery: 'Поиск', price: '', itemsData: searchItems.map(i => ({ ...i, imgDeleteUrls: i.imgDeleteUrls || [] })),
+                            images: historyImages, orderId: data.orderId, orderNumber: data.orderNumber
+                        });
+                        tg.close();
+                        return;
+                    }
+                } catch (_) {}
+                if (!apiOk) {
+                    const historyImages = searchItems.map(item => item.imgUrls[0]).filter(url => !!url);
+                    await addToHistoryV2({
+                        title: 'Заявка на поиск', date: new Date().toLocaleString('ru-RU'),
+                        delivery: 'Поиск', price: '', itemsData: searchItems, images: historyImages
+                    });
+                    let payload = { type: 'search', items: searchItems };
+                    let json = JSON.stringify(payload);
+                    if (json.length > 3500) payload.items = payload.items.map(i => ({ ...i, imgUrls: [] }));
+                    tg.sendData(JSON.stringify(payload));
+                }
+            } catch (e) { alert("Ошибка: " + e.message); }
+        }
+
+        async function fetchOrderStatus(orderId, orderNumber) {
+            if (!orderId && !orderNumber) return null;
+            try {
+                const param = orderNumber ? `orderNumber=${encodeURIComponent(orderNumber)}` : `orderId=${encodeURIComponent(orderId)}`;
+                const res = await fetch(`${ORDER_STATUS_URL}?${param}`);
+                const data = await res.json();
+                return data.ok ? data : null;
+            } catch (e) { return null; }
+        }
+
+        let deleteMode = false;
+
+        function toggleDeleteCheckbox(index) {
+            const cb = document.querySelector(`.delete-order-cb[data-index="${index}"]`);
+            if (cb) cb.checked = !cb.checked;
+        }
+
+        function toggleDeleteMode() {
+            deleteMode = !deleteMode;
+            document.getElementById('btn-delete-toggle').classList.toggle('hidden', deleteMode);
+            document.getElementById('btn-cancel-delete').classList.toggle('hidden', !deleteMode);
+            document.getElementById('btn-delete-confirm').classList.toggle('hidden', !deleteMode);
+            renderHistory();
+        }
+
+        function confirmDeleteSelected() {
+            const checked = Array.from(document.querySelectorAll('.delete-order-cb:checked')).map(el => parseInt(el.dataset.index, 10));
+            if (checked.length === 0) { alert('Выберите заказы для удаления'); return; }
+            if (!confirm('Действительно ли вы хотите удалить выбранные заказы?')) return;
+            deleteSelectedOrders();
+        }
+
+        async function deleteSelectedOrders() {
+            const checked = Array.from(document.querySelectorAll('.delete-order-cb:checked')).map(el => parseInt(el.dataset.index, 10));
+            if (checked.length === 0) return;
+            const history = await loadFullHistory();
+            const toRemove = new Set(checked);
+            const deleteUrls = [];
+            const toMarkDeleted = [];
+            for (const idx of checked) {
+                const item = history[idx];
+                if (!item) continue;
+                if (item.itemsData) {
+                    for (const prod of item.itemsData) {
+                        const urls = prod.imgDeleteUrls || [];
+                        for (const u of urls) if (u && typeof u === 'string') deleteUrls.push(u);
+                    }
+                }
+                if (item.orderId || item.orderNumber) {
+                    toMarkDeleted.push({ orderId: item.orderId, orderNumber: item.orderNumber });
+                }
+            }
+            try {
+                if (deleteUrls.length > 0) {
+                    await fetch(`${WORKER_URL}/api/delete-images`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ deleteUrls })
+                    });
+                }
+                if (toMarkDeleted.length > 0) {
+                    try {
+                        await fetch(`${WORKER_URL}/api/mark-order-deleted`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ orders: toMarkDeleted })
+                        });
+                    } catch (_) {}
+                }
+                const newHistory = history.filter((_, i) => !toRemove.has(i));
+                await saveHistoryToBackend(newHistory, getHistoryUserId());
+                deleteMode = false;
+                document.getElementById('btn-delete-toggle').classList.remove('hidden');
+                document.getElementById('btn-cancel-delete').classList.add('hidden');
+                document.getElementById('btn-delete-confirm').classList.add('hidden');
+                renderHistory();
+            } catch (e) {
+                console.error(e);
+                alert('Ошибка: ' + e.message);
+            }
+        }
+
+        async function fetchOrdersForClient() {
+            const userId = getHistoryUserId();
+            if (!userId) return [];
+            try {
+                const res = await fetch(`${ORDERS_URL}?clientId=${encodeURIComponent(String(userId))}`);
+                const data = await res.json();
+                return data.ok && Array.isArray(data.orders) ? data.orders : [];
+            } catch (e) { return []; }
+        }
+
+        function parseTotalRubFromItem(item) {
+            if (item.totalRub) return item.totalRub;
+            if (!item.price) return null;
+            const str = String(item.price).replace(/<[^>]*>/g, ' ');
+            const match = str.match(/(\d[\d\s]*)\s*₽/);
+            return match ? parseInt(match[1].replace(/\s/g, ''), 10) : null;
+        }
+
+        function matchOrderByTotalRub(orders, totalRub) {
+            if (!orders.length) return null;
+            const rub = typeof totalRub === 'number' ? totalRub : parseInt(String(totalRub).replace(/\s/g, ''), 10);
+            if (isNaN(rub)) return null;
+            return orders.find(o => o.totalRub === rub) || orders.find(o => Math.abs((o.totalRub || 0) - rub) < 10);
+        }
+
+        function findOrderStatus(allOrders, item) {
+            if (!allOrders || !allOrders.length) return null;
+            if (item.orderNumber) {
+                const o = allOrders.find(x => Number(x.orderNumber) === Number(item.orderNumber));
+                if (o) return o;
+            }
+            if (item.orderId) {
+                const o = allOrders.find(x => x.orderId === item.orderId);
+                if (o) return o;
+            }
+            if (item.timestamp) {
+                const ts = Number(item.timestamp);
+                const o = allOrders.find(x => x.timestamp && Math.abs(Number(x.timestamp) - ts) < 120000);
+                if (o) return o;
+            }
+            if (item.orderId) {
+                const parts = String(item.orderId).split('_');
+                if (parts.length >= 2) {
+                    const ts = Number(parts[parts.length - 1]);
+                    if (ts > 0) {
+                        const o = allOrders.find(x => {
+                            const xParts = String(x.orderId || '').split('_');
+                            const xTs = xParts.length >= 2 ? Number(xParts[xParts.length - 1]) : 0;
+                            return xTs > 0 && Math.abs(xTs - ts) < 120000;
+                        });
+                        if (o) return o;
+                    }
+                }
+            }
+            const totalRub = parseTotalRubFromItem(item);
+            if (totalRub) return matchOrderByTotalRub(allOrders, totalRub);
+            return null;
+        }
+
+        function formatOrderStatus(status) {
+            if (!status) return { order: '🔴 Заказ: Не оплачен', delivery: '🔴 Доставка: Счёт не выставлен' };
+            const order = status.orderPaid ? '🟢 Заказ: Оплачен' : '🔴 Заказ: Не оплачен';
+            let delivery;
+            if (status.deliveryAmount) {
+                delivery = status.deliveryPaid ? '🟢 Доставка: Оплачена' : `🔴 Доставка: ${status.deliveryAmount} ₽ — Не оплачена`;
+            } else {
+                delivery = '🔴 Доставка: Счёт не выставлен';
+            }
+            return { order, delivery };
+        }
+
+        let renderHistoryVersion = 0;
+
+        function getHistoryItemTimestamp(item) {
+            if (item.timestamp) return Number(item.timestamp);
+            const oid = item.orderId || '';
+            const m = oid.match(/_(\d{10,})$/);
+            if (m) return Number(m[1]);
+            return 0;
+        }
+
+        function sortHistoryNewestFirst(history) {
+            return [...history].sort((a, b) => {
+                const ta = getHistoryItemTimestamp(a), tb = getHistoryItemTimestamp(b);
+                if (tb !== ta) return tb - ta;
+                const na = Number(a.orderNumber) || 0, nb = Number(b.orderNumber) || 0;
+                return nb - na;
+            });
+        }
+
+        async function renderHistory() {
+            const myVersion = ++renderHistoryVersion;
+            const container = document.getElementById('historyList');
+            container.innerHTML = '<div style="text-align:center; margin-top:20px; color:#666;">Загрузка...</div>';
+            
+            const [historyRaw, allOrders] = await Promise.all([
+                loadFullHistory(),
+                fetchOrdersForClient()
+            ]);
+            if (myVersion !== renderHistoryVersion) return;
+            const history = sortHistoryNewestFirst(historyRaw);
+            historyDataCache = history;
+            lastOrdersCache = allOrders;
+            container.innerHTML = '';
+            
+            if (history.length === 0) { container.innerHTML = '<div class="empty-history">История заказов пуста</div>'; return; }
+            
+            let historyUpdated = false;
+            for (let i = 0; i < history.length; i++) {
+                const item = history[i];
+                let orderStatusText = item.orderStatus || '';
+                let deliveryStatusText = item.deliveryStatus || '';
+                if (item.title === 'Заказ на выкуп') {
+                    let status = findOrderStatus(allOrders, item);
+                    if (!status && (item.orderNumber || item.orderId)) {
+                        status = await fetchOrderStatus(item.orderId, item.orderNumber);
+                        if (status) status = { orderId: item.orderId, orderNumber: item.orderNumber, ...status };
+                    }
+                    if (status && !item.orderNumber) {
+                        item.orderNumber = status.orderNumber;
+                        historyUpdated = true;
+                    }
+                    const formatted = formatOrderStatus(status);
+                    orderStatusText = formatted.order;
+                    deliveryStatusText = formatted.delivery;
+                    item.orderStatus = orderStatusText;
+                    item.deliveryStatus = deliveryStatusText;
+                }
+
+                let imagesHtml = '';
+                if (item.images && item.images.length > 0) {
+                    imagesHtml = `<div class="history-imgs">
+                            ${item.images.map(url => `<img src="${url}" class="history-img-thumb" onclick="openLightbox('${url}'); event.stopPropagation();">`).join('')}
+                        </div>`;
+                }
+
+                const statusHtml = (orderStatusText || deliveryStatusText)
+                    ? `<div class="history-status">
+                            ${orderStatusText ? `<span class="${orderStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid'}">${orderStatusText}</span>` : ''}
+                            ${deliveryStatusText ? `<span class="${deliveryStatusText.includes('🟢') ? 'status-paid' : 'status-unpaid'}">${deliveryStatusText}</span>` : ''}
+                       </div>`
+                    : '';
+
+                const titleDisplay = (item.title === 'Заказ на выкуп' && item.orderNumber) ? `Заказ №${item.orderNumber}` : (item.title === 'Заявка на поиск' && item.orderNumber) ? `Заявка №${item.orderNumber}` : item.title;
+                const checkboxHtml = deleteMode
+                    ? `<label class="history-checkbox shrink-0 mt-1" onclick="event.stopPropagation()"><input type="checkbox" class="delete-order-cb" data-index="${i}"><span class="checkbox-box"></span></label>`
+                    : '';
+                const itemOnclick = deleteMode ? `onclick="toggleDeleteCheckbox(${i})"` : `onclick="openHistoryDetails(${i})"`;
+                const html = `
+                    <div class="history-item flex gap-3 items-start" ${itemOnclick}>
+                        ${checkboxHtml}
+                        <div class="flex-1 min-w-0">
+                            <div class="history-header"><span class="history-type">${titleDisplay}</span><span class="history-date">${item.date}</span></div>
+                            <div class="history-details">${item.itemsData ? item.itemsData.length : 0} позиций ${item.delivery ? '• ' + item.delivery : ''}</div>
+                            ${statusHtml}
+                            ${item.price ? `<div class="history-price">${item.price}</div>` : ''}
+                            ${imagesHtml}
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            }
+            if (historyUpdated && myVersion === renderHistoryVersion) {
+                await saveHistoryToBackend(history, getHistoryUserId());
+            }
+        }
+
+        // Инициализация: кэшируем userId и настраиваем UI
+        getHistoryUserId();
+        document.body.style.backgroundColor = "var(--bg-color)";
+        document.getElementById('selectedBoxName').innerText = "Выберите упаковку";
+        switchTab(currentTab);
+    </script>
+</body>
+</html>

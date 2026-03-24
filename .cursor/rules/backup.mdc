@@ -1,0 +1,16 @@
+---
+description: Резервная копия проекта (backup/)
+---
+
+# Обновление резервной копии
+
+Когда пользователь просит **обновить резервную копию** или **сделать бэкап**:
+
+1. Удалить папку `backup/` целиком (если есть).
+2. Создать заново `backup/` и скопировать актуальные файлы:
+   - `index.html` → `backup/index.html`
+   - `nws-bot-worker/index.js` → `backup/nws-bot-worker/index.js`
+   - `nws-bot-worker/wrangler.toml` → `backup/nws-bot-worker/wrangler.toml`
+3. Выполнить `git add`, `git commit` с осмысленным сообщением и `--trailer "Made-with: Cursor"`, затем `git push origin main`.
+
+Не хранить в `backup/` дубликаты всего репозитория — только эти артефакты, если пользователь не указал иное.
