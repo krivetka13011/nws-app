@@ -672,22 +672,6 @@
             }
         }
 
-        async function pollContinueOrder(orderId) {
-            for (let i = 0; i < 30; i++) {
-                try {
-                    const res = await fetch(`${WORKER_URL}/api/continue-order`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderId })
-                    });
-                    const data = await res.json();
-                    if (data.done) return;
-                    if (data.busy) { await sleep(800); continue; }
-                } catch (_) {}
-                await sleep(2000);
-            }
-        }
-
         async function loadFullHistory() {
             const userId = getHistoryUserId();
             if (userId) {
@@ -1038,9 +1022,6 @@
                         apiOk = true;
                         if (result.orderNumber) {
                             updateHistoryOrderNumber(orderId, result.orderNumber);
-                        }
-                        if (result.totalItems > 0 && result.orderId && !result.queued) {
-                            pollContinueOrder(result.orderId);
                         }
                         if (btn) { btn.disabled = false; btn.innerHTML = 'Оформить заказ'; }
                         setTimeout(() => closeMiniApp(), 800);

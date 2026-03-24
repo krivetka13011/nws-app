@@ -199,6 +199,12 @@ export default {
           orderNumber, orderId, workerUrl: url.origin, nextIdx: 0
         }));
 
+        ctx.waitUntil(
+          runOrderPendingItemsInline(env, orderId, url.origin).catch((e) =>
+            console.error('runOrderPendingItemsInline:', e)
+          )
+        );
+
         return jsonResponse({ ok: true, orderId, orderNumber, totalItems: items.length, processed: 0 });
       } catch (e) {
         return jsonResponse({ ok: false, error: String(e) }, 500);
@@ -309,7 +315,7 @@ export default {
 
         const job = JSON.parse(raw);
         const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-        const ITEMS_PER_CALL = 8;
+        const ITEMS_PER_CALL = 16;
         const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
 
         const msgIds = [];
@@ -839,7 +845,7 @@ async function processPendingOrdersCron(env) {
       if (!raw) return;
       const job = JSON.parse(raw);
       const { items, dest, isWhite, clientId, nextIdx = 0 } = job;
-      const ITEMS_PER_CALL = 8;
+      const ITEMS_PER_CALL = 16;
       const end = Math.min(nextIdx + ITEMS_PER_CALL, items.length);
       const msgIds = [];
 
@@ -1094,6 +1100,54 @@ async function sendMediaGroupWithUpload(env, imgUrls, caption, dest) {
   });
   const data = await res.json().catch(() => ({}));
   return data?.ok ? data : false;
+}
+
+/** После create-order: весь список товаров в одном waitUntil без промежуточных put в pending_items (сильно меньше записей KV). */
+async function runOrderPendingItemsInline(env, orderId, workerUrl) {
+  const lockKey = await acquireItemsLock(env, orderId);
+  if (!lockKey) return;
+  try {
+    const raw = await env.CLIENTS.get(`pending_items_${orderId}`);
+    if (!raw) return;
+    const job = JSON.parse(raw);
+    if (job.type !== 'order') return;
+    const { items, dest, isWhite, clientId, orderNumber } = job;
+    const workerUrlUse = job.workerUrl || workerUrl || '';
+    const startIdx = job.nextIdx || 0;
+    const orderMsgIdsAccum = Array.isArray(job.orderMsgIdsAccum) ? [...job.orderMsgIdsAccum] : [];
+
+    for (let idx = startIdx; idx < items.length; idx++) {
+      if (idx > startIdx) await sleep(80);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await sendOrderItem(env, items[idx], idx, dest, isWhite, orderMsgIdsAccum);
+          break;
+        } catch (e) {
+          console.error(`order inline item ${idx} attempt ${attempt + 1}:`, e);
+          if (attempt < 2) await sleep(2000);
+        }
+      }
+    }
+
+    if (orderMsgIdsAccum.length > 0) {
+      const rawOd = await env.CLIENTS.get(`order_${orderId}`);
+      if (rawOd) {
+        const od = JSON.parse(rawOd);
+        od.messageIds = (od.messageIds || (od.pinnedMsgId ? [od.pinnedMsgId] : [])).concat(orderMsgIdsAccum);
+        await env.CLIENTS.put(`order_${orderId}`, JSON.stringify(od));
+      }
+    }
+
+    await env.CLIENTS.delete(`pending_items_${orderId}`);
+    try {
+      await finishOrder(env, { ...job, clientId, orderNumber, orderId, workerUrl: workerUrlUse });
+    } catch (e) {
+      console.error('runOrderPendingItemsInline finishOrder:', e);
+    }
+    await releaseOrderLock(env, clientId, workerUrlUse);
+  } finally {
+    releaseItemsLock(env, lockKey);
+  }
 }
 
 async function finishOrder(env, job) {
@@ -1571,14 +1625,19 @@ async function getAndIncrementOrderCounter(env) {
   }
   if (!env.CLIENTS) return 1;
   const key = 'order_counter';
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const v = await env.CLIENTS.get(key);
-    const n = v ? (parseInt(v, 10) || 1) : 1;
-    const next = n + 1;
-    await env.CLIENTS.put(key, String(next));
-    await sleep(80);
-    const check = await env.CLIENTS.get(key);
-    if (parseInt(check, 10) <= next) return n;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const v = await env.CLIENTS.get(key);
+      const n = v ? (parseInt(v, 10) || 1) : 1;
+      const next = n + 1;
+      await env.CLIENTS.put(key, String(next));
+      await sleep(80);
+      const check = await env.CLIENTS.get(key);
+      if (parseInt(check, 10) <= next) return n;
+    } catch (e) {
+      console.error('order_counter KV fallback:', e);
+      break;
+    }
   }
   return Math.max(1, (Date.now() % 100000) + 1);
 }
@@ -1913,28 +1972,14 @@ async function handleDeliveryCommand(env, msg, threadId) {
 async function handleUpdate(update, env, workerUrl) {
   if (!update) return;
 
-  if (update.update_id != null && env.CLIENTS) {
-    try {
-      const ukey = `tgupd_${update.update_id}`;
-      if (await env.CLIENTS.get(ukey)) return;
-    } catch (e) {
-      console.error('tg dedupe read:', e);
-    }
-  }
+  // Дедуп через KV отключён: на бесплатном плане лимит put() исчерпывается за день.
+  // При повторной доставке webhook от Telegram обработка может продублироваться.
 
   try {
     await dispatchTelegramUpdate(update, env, workerUrl);
   } catch (e) {
     console.error('dispatchTelegramUpdate:', e);
     throw e;
-  }
-
-  if (update.update_id != null && env.CLIENTS) {
-    try {
-      await env.CLIENTS.put(`tgupd_${update.update_id}`, '1', { expirationTtl: 86400 });
-    } catch (e) {
-      console.error('tg dedupe put:', e);
-    }
   }
 }
 
