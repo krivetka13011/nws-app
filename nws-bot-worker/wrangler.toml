@@ -6,9 +6,17 @@ compatibility_date = "2026-03-08"
 name = "ORDER_COUNTER"
 class_name = "OrderCounter"
 
+[[durable_objects.bindings]]
+name = "TOPIC_COORD"
+class_name = "TopicCoordinator"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["OrderCounter"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["TopicCoordinator"]
 
 [triggers]
 crons = ["* * * * *"]

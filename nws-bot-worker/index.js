@@ -1214,26 +1214,36 @@ function clientName(from) {
   return `${name} | ${username}`;
 }
 
-async function getOrCreateTopic(env, clientChatId, from) {
+async function getOrCreateTopicCore(env, clientChatId, from) {
   const groupId = getGroupId(env);
   if (!groupId || !env.CLIENTS) return { topicId: null, created: false };
 
   const key = `client_${clientChatId}`;
-  let stored = await env.CLIENTS.get(key);
+  const stored = await env.CLIENTS.get(key);
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
       const topicId = parsed.topicId;
-      const check = await callTelegram(env, 'sendChatAction', {
-        chat_id: groupId,
-        message_thread_id: topicId,
-        action: 'typing'
-      });
-      if (check && check.ok && !isGeneralTopic(env, topicId)) return { topicId, created: false };
-      // Тема удалена/закрыта или это General — инвалидируем кэш
-      await env.CLIENTS.delete(`topic_${topicId}`);
-    } catch (_) {}
-    await env.CLIENTS.delete(key);
+      if (isGeneralTopic(env, topicId)) {
+        await env.CLIENTS.delete(`topic_${topicId}`).catch(() => {});
+        await env.CLIENTS.delete(key);
+      } else {
+        const check = await callTelegram(env, 'sendChatAction', {
+          chat_id: groupId,
+          message_thread_id: topicId,
+          action: 'typing'
+        });
+        if (check && check.ok) return { topicId, created: false };
+        if (check && !check.ok && isThreadNotFound(check)) {
+          await env.CLIENTS.delete(`topic_${topicId}`).catch(() => {});
+          await env.CLIENTS.delete(key);
+        } else {
+          return { topicId, created: false };
+        }
+      }
+    } catch (_) {
+      await env.CLIENTS.delete(key).catch(() => {});
+    }
   }
 
   const name = clientName(from || {});
@@ -1260,11 +1270,31 @@ async function getOrCreateTopic(env, clientChatId, from) {
   return { topicId, created: true };
 }
 
+async function getOrCreateTopic(env, clientChatId, from) {
+  if (!getGroupId(env) || !env.CLIENTS) return { topicId: null, created: false };
+  if (env.TOPIC_COORD) {
+    try {
+      const id = env.TOPIC_COORD.idFromName(`c_${clientChatId}`);
+      const stub = env.TOPIC_COORD.get(id);
+      const res = await stub.fetch('https://topic-coord/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'getOrCreate', clientChatId, from })
+      });
+      const data = await res.json();
+      if (data && typeof data.topicId !== 'undefined') return data;
+    } catch (e) {
+      console.error('getOrCreateTopic TOPIC_COORD:', e);
+    }
+  }
+  return getOrCreateTopicCore(env, clientChatId, from);
+}
+
 function isGeneralTopic(env, topicId) {
   return !topicId || topicId === 1 || topicId === getGeneralTopicId(env);
 }
 
-async function invalidateAndRecreateTopic(env, clientChatId, from) {
+async function invalidateAndRecreateCore(env, clientChatId, from) {
   const groupId = getGroupId(env);
   if (!groupId || !env.CLIENTS) return null;
   const key = `client_${clientChatId}`;
@@ -1272,7 +1302,7 @@ async function invalidateAndRecreateTopic(env, clientChatId, from) {
   if (stored) {
     try {
       const { topicId: old } = JSON.parse(stored);
-      await env.CLIENTS.delete(`topic_${old}`);
+      await env.CLIENTS.delete(`topic_${old}`).catch(() => {});
     } catch (_) {}
     await env.CLIENTS.delete(key);
   }
@@ -1284,6 +1314,27 @@ async function invalidateAndRecreateTopic(env, clientChatId, from) {
   await env.CLIENTS.put(key, JSON.stringify({ topicId, name }));
   await env.CLIENTS.put(`topic_${topicId}`, String(clientChatId));
   return topicId;
+}
+
+async function invalidateAndRecreateTopic(env, clientChatId, from) {
+  const groupId = getGroupId(env);
+  if (!groupId || !env.CLIENTS) return null;
+  if (env.TOPIC_COORD) {
+    try {
+      const id = env.TOPIC_COORD.idFromName(`c_${clientChatId}`);
+      const stub = env.TOPIC_COORD.get(id);
+      const res = await stub.fetch('https://topic-coord/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'invalidate', clientChatId, from })
+      });
+      const data = await res.json();
+      if (data && Object.prototype.hasOwnProperty.call(data, 'topicId')) return data.topicId;
+    } catch (e) {
+      console.error('invalidateAndRecreateTopic TOPIC_COORD:', e);
+    }
+  }
+  return invalidateAndRecreateCore(env, clientChatId, from);
 }
 
 function isThreadNotFound(result) {
@@ -1454,6 +1505,43 @@ export class OrderCounter {
       });
     }
     return new Response('Not found', { status: 404 });
+  }
+}
+
+/** Сериализация getOrCreate/invalidate по clientChatId — одна тема на клиента без гонок KV. */
+export class TopicCoordinator {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const env = this.env;
+    if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return jsonResponse({ error: 'bad json' }, 400);
+    }
+    const { op, clientChatId, from } = body;
+    if (clientChatId == null || clientChatId === '') {
+      return jsonResponse({ error: 'clientChatId required' }, 400);
+    }
+    try {
+      if (op === 'getOrCreate') {
+        const r = await getOrCreateTopicCore(env, clientChatId, from);
+        return jsonResponse(r);
+      }
+      if (op === 'invalidate') {
+        const topicId = await invalidateAndRecreateCore(env, clientChatId, from);
+        return jsonResponse({ topicId });
+      }
+      return jsonResponse({ error: 'unknown op' }, 400);
+    } catch (e) {
+      console.error('TopicCoordinator:', e);
+      return jsonResponse({ error: String(e) }, 500);
+    }
   }
 }
 
@@ -1718,6 +1806,13 @@ async function handleDeliveryCommand(env, msg, threadId) {
 // ===== Update router =====
 
 async function handleUpdate(update, env, workerUrl) {
+  if (update.update_id != null && env.CLIENTS) {
+    const ukey = `tgupd_${update.update_id}`;
+    const seen = await env.CLIENTS.get(ukey);
+    if (seen) return;
+    await env.CLIENTS.put(ukey, '1', { expirationTtl: 86400 });
+  }
+
   // Обработка нажатий на inline-кнопки
   if (update.callback_query) {
     await handleCallbackQuery(env, update.callback_query);
@@ -1947,7 +2042,8 @@ async function handleStart(env, chatId, from) {
           message_id: ping.result.message_id
         });
       }
-      await invalidateAndRecreateTopic(env, chatId, from);
+      const newTopicId = await invalidateAndRecreateTopic(env, chatId, from);
+      if (newTopicId) topicId = newTopicId;
     } else if (ping?.ok && ping.result?.message_id) {
       await callTelegram(env, 'deleteMessage', {
         chat_id: getGroupId(env),
@@ -1982,11 +2078,20 @@ async function handleStart(env, chatId, from) {
     resize_keyboard: true
   };
 
-  await callTelegram(env, 'sendMessage', {
-    chat_id: chatId,
-    text,
-    reply_markup: keyboard
-  });
+  try {
+    await sendWithRetry(env, 'sendMessage', {
+      chat_id: chatId,
+      text,
+      reply_markup: keyboard
+    });
+  } catch (e) {
+    console.error('handleStart welcome sendWithRetry:', e);
+    await callTelegram(env, 'sendMessage', {
+      chat_id: chatId,
+      text,
+      reply_markup: keyboard
+    });
+  }
 
   await addToBroadcastList(env, chatId);
 }
