@@ -2,7 +2,8 @@
   "name": "nws-bot-worker",
   "private": true,
   "scripts": {
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env dev"
   },
   "devDependencies": {
     "wrangler": "^4.71.0"

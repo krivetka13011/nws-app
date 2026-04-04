@@ -42,3 +42,45 @@ GROUP_ID = "-1003737384929"
 GENERAL_TOPIC_ID = "1"
 # ImgBB: несколько ключей по порядку; при лимите ключа — следующий (см. parseImgbbKeys в index.js)
 IMGBB_KEYS = "2e5120fc66bd76e8da3322ee87f71e5d,dcf453b7af6b316bc7eca42c17caf33a,0dd6e2a0026227e725e8c38aca4e83c3,09503d308f10f6e1fc307690f4412c4e,a74aee1aaf91db4a2fcf7540e6407b53,aadd2aede69f4f579cc662df988fa888,74eccee2a9aee85489a69bbeb3125b8a,c4ee87f11b6cd117e7e042bb8d7a264f,4ad7d7731e9760ca0fc6f257c3394275,85e957ca85e73b22c2569868eca0ffc4,e48458ee7ec9ca64b8de0e53b1b72f34,7533d437f1435e845a52cc38634732db,98b8158a4aa28aa4cd7e7e7f5ba86a71,da1b12a3e9ce7f62c6e678ff64d36264,a82a956f9abe074b73ff8fd3a985ff73,f7d5cf1c7ed4aa1501c116a1ef2016a6,0e885aa242c591d7b81f14f13ced36a8,6bec0f6d7f8a5f1ac1651956ec941f63,6584d568ea326feb009008f21e6c17be,c1341fe31d14b36fc03e549aa31bf653"
+
+# --- Окружение dev: второй Worker + отдельные KV (бот для тестов). Деплой: wrangler deploy --env dev
+# Секреты: wrangler secret put BOT_TOKEN --env dev  (токен dev-бота из @BotFather)
+[env.dev]
+name = "nwsnumbot-dev"
+
+[[env.dev.durable_objects.bindings]]
+name = "ORDER_COUNTER"
+class_name = "OrderCounter"
+
+[[env.dev.durable_objects.bindings]]
+name = "TOPIC_COORD"
+class_name = "TopicCoordinator"
+
+[[env.dev.migrations]]
+tag = "v1"
+new_sqlite_classes = ["OrderCounter"]
+
+[[env.dev.migrations]]
+tag = "v2"
+new_sqlite_classes = ["TopicCoordinator"]
+
+[[env.dev.triggers]]
+crons = ["* * * * *"]
+
+[[env.dev.kv_namespaces]]
+binding = "CLIENTS"
+id = "0a51f1ffaf0c4298825152960d17ab73"
+
+[[env.dev.kv_namespaces]]
+binding = "ORDERS_KV"
+id = "19c064824f36482c83d6a9c6bdfcd41b"
+
+[env.dev.vars]
+MANAGER_ID = 1159166497
+# Мини-приложение сразу ходит в dev-воркер (?worker=… подставляется в index.html)
+APP_URL = "https://krivetka13011.github.io/nws-app/?worker=https%3A%2F%2Fnwsnumbot-dev.krivetkagames.workers.dev"
+WORKER_URL = "https://nwsnumbot-dev.krivetkagames.workers.dev"
+WEBHOOK_SECRET = "nws-dev-webhook-secret"
+GROUP_ID = "-1003737384929"
+GENERAL_TOPIC_ID = "1"
+IMGBB_KEYS = "2e5120fc66bd76e8da3322ee87f71e5d,dcf453b7af6b316bc7eca42c17caf33a,0dd6e2a0026227e725e8c38aca4e83c3,09503d308f10f6e1fc307690f4412c4e,a74aee1aaf91db4a2fcf7540e6407b53,aadd2aede69f4f579cc662df988fa888,74eccee2a9aee85489a69bbeb3125b8a,c4ee87f11b6cd117e7e042bb8d7a264f,4ad7d7731e9760ca0fc6f257c3394275,85e957ca85e73b22c2569868eca0ffc4,e48458ee7ec9ca64b8de0e53b1b72f34,7533d437f1435e845a52cc38634732db,98b8158a4aa28aa4cd7e7e7f5ba86a71,da1b12a3e9ce7f62c6e678ff64d36264,a82a956f9abe074b73ff8fd3a985ff73,f7d5cf1c7ed4aa1501c116a1ef2016a6,0e885aa242c591d7b81f14f13ced36a8,6bec0f6d7f8a5f1ac1651956ec941f63,6584d568ea326feb009008f21e6c17be,c1341fe31d14b36fc03e549aa31bf653"
