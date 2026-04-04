@@ -64,7 +64,7 @@ new_sqlite_classes = ["OrderCounter"]
 tag = "v2"
 new_sqlite_classes = ["TopicCoordinator"]
 
-[[env.dev.triggers]]
+[env.dev.triggers]
 crons = ["* * * * *"]
 
 [[env.dev.kv_namespaces]]
