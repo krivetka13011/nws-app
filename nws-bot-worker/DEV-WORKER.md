@@ -1,35 +1,43 @@
 # Dev-бот и окружение `dev`
 
-Рабочий (прод) воркер: **`nwsnumbot`** — деплой как раньше: `wrangler deploy` из этой папки или push в `main` (GitHub Actions).
+Рабочий (прод) воркер: **`nwsnumbot`** — деплой: `wrangler deploy` или push в `main` (GitHub Actions).
 
 Тестовый воркер: **`nwsnumbot-dev`** — отдельные KV и Durable Objects, свой токен бота.
 
-## Один раз
+## Мини-приложение: два URL
 
-1. В **@BotFather** создайте второго бота, скопируйте **токен**.
-2. В каталоге `nws-bot-worker` выполните:
-   ```bash
-   npx wrangler secret put BOT_TOKEN --env dev
-   ```
-   Вставьте токен **dev**-бота (не прод!).
-3. Деплой dev:
-   ```bash
-   npx wrangler deploy --env dev
-   ```
-4. Повесьте webhook на **dev**-бота (подставьте свой токен и при необходимости другой секрет из `wrangler.toml` → `[env.dev.vars]` `WEBHOOK_SECRET`):
+| | URL на GitHub Pages | Файл в репо | API |
+|---|---------------------|-------------|-----|
+| **Прод** | `https://krivetka13011.github.io/nws-app/` | `index.html` | `nwsnumbot` |
+| **Dev** | `https://krivetka13011.github.io/nws-app/dev/` | `dev/index.html` | `nwsnumbot-dev` |
+
+У dev отдельные ключи `localStorage` (`nws_history_dev`), чтобы история в браузере не смешивалась с продом.
+
+В **`wrangler.toml`** у прод задаётся `APP_URL` без `/dev/`, у `[env.dev.vars]` — `APP_URL` с `/dev/`, чтобы кнопка «Приложение» у каждого бота открывала свою страницу.
+
+## Перенос на основного бота
+
+- **Воркер:** после проверки — merge в `main` и обычный деплой прод (CI уже деплоит и прод, и dev).
+- **Мини-приложение:** переносить содержимое **`dev/index.html` → корневой `index.html`** только когда ты **явно** скажешь, что обновление готово к продакшену. До этого правки только в `dev/`.
+
+## Один раз (dev-бот)
+
+1. Токен dev-бота из **@BotFather**.
+2. `npx wrangler secret put BOT_TOKEN --env dev`
+3. `npx wrangler deploy --env dev` (или дождаться CI после push).
+4. Webhook:
    ```text
    https://api.telegram.org/bot<DEV_BOT_TOKEN>/setWebhook?url=https://nwsnumbot-dev.krivetkagames.workers.dev/webhook/nws-dev-webhook-secret
    ```
-5. В **BotFather** → dev-бот → **Menu Button / Web App** можно указать ту же страницу GitHub Pages; кнопка «Приложение» из чата dev-бота откроет URL с `?worker=…` (задаётся через `APP_URL` в `[env.dev.vars]`), мини-приложение будет ходить в **dev**-воркер.
+5. В **BotFather** у dev-бота Web App URL: **`https://krivetka13011.github.io/nws-app/dev/`** (или с `?uid=` не нужен — `uid` добавляет бот из `APP_URL`).
 
 ## Важно
 
-- **GROUP_ID** в dev сейчас совпадает с продом: тестовые заказы попадут в ту же группу. Для изоляции создайте тестовую супергруппу, пропишите её ID в `wrangler.toml` → `[env.dev.vars]` → `GROUP_ID` и задеплойте снова.
-- Счётчик заказов и темы в dev — **отдельные** (свои DO), номера заказов в dev не совпадают с продом.
-- Перенос на прод: после проверки в dev — обычный PR/merge и **`wrangler deploy`** без `--env dev` (или push в `main`).
+- **GROUP_ID** в dev может совпадать с продом — тесты попадут в ту же группу. Для изоляции — отдельная супергруппа в `[env.dev.vars]`.
+- Счётчики заказов и темы в dev изолированы (свои DO).
 
 ## Публикация из CI
 
-При push в `main`, если меняется `nws-bot-worker/**`, workflow **Deploy Worker** сначала деплоит **прод** (`nwsnumbot`), затем **dev** (`nwsnumbot-dev`). Токен dev-бота хранится только в Cloudflare как секрет `BOT_TOKEN` для окружения `dev`.
+При push в `main` при изменении `nws-bot-worker/**` workflow **Deploy Worker** деплоит сначала **прод**, затем **dev**. Публикация **статики** Pages — любой push в репозиторий (в т.ч. `dev/index.html`).
 
-Ручной деплой только dev: **Actions → Deploy Worker (dev)** → Run workflow.
+Ручной деплой только воркера dev: **Actions → Deploy Worker (dev)**.

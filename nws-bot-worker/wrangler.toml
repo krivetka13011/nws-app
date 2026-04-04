@@ -77,8 +77,8 @@ id = "19c064824f36482c83d6a9c6bdfcd41b"
 
 [env.dev.vars]
 MANAGER_ID = 1159166497
-# Мини-приложение сразу ходит в dev-воркер (?worker=… подставляется в index.html)
-APP_URL = "https://krivetka13011.github.io/nws-app/?worker=https%3A%2F%2Fnwsnumbot-dev.krivetkagames.workers.dev"
+# Отдельная страница мини-приложения для тестов (не корень сайта)
+APP_URL = "https://krivetka13011.github.io/nws-app/dev/"
 WORKER_URL = "https://nwsnumbot-dev.krivetkagames.workers.dev"
 WEBHOOK_SECRET = "nws-dev-webhook-secret"
 GROUP_ID = "-1003737384929"
