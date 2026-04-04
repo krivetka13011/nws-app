@@ -43,3 +43,17 @@ jobs:
           if [ "$http_code" != "200" ]; then
             echo "::error::Уведомление не отправлено. Проверьте BOT_TOKEN и NOTIFY_CHAT_ID (или chat_id 1159166497). Ответ: $body"
           fi
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy dev Worker (nwsnumbot-dev)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: nws-bot-worker
+          wranglerVersion: "4.71.0"
+          command: deploy --env dev

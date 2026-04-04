@@ -28,6 +28,8 @@
 - Счётчик заказов и темы в dev — **отдельные** (свои DO), номера заказов в dev не совпадают с продом.
 - Перенос на прод: после проверки в dev — обычный PR/merge и **`wrangler deploy`** без `--env dev` (или push в `main`).
 
-## Ручной деплой только dev (CI)
+## Публикация из CI
 
-В репозитории: **Actions → Deploy Worker (dev)** → Run workflow.
+При push в `main`, если меняется `nws-bot-worker/**`, workflow **Deploy Worker** сначала деплоит **прод** (`nwsnumbot`), затем **dev** (`nwsnumbot-dev`). Токен dev-бота хранится только в Cloudflare как секрет `BOT_TOKEN` для окружения `dev`.
+
+Ручной деплой только dev: **Actions → Deploy Worker (dev)** → Run workflow.
